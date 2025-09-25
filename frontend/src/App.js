@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from "./AuthContext";
+import Login from "./Login";
+import Admin from "./Admin";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 
+// ChangeMapView pour déplacer la vue
 function ChangeMapView({ coords }) {
   const map = useMap();
   if (coords) map.setView(coords, 12);
   return null;
 }
 
-export default function App() {
+// Composant Map avec filtres et markers
+function MapWithEvents() {
   const [events, setEvents] = useState([]);
   const [selectedType, setSelectedType] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -62,6 +67,7 @@ export default function App() {
 
   return (
     <div className="flex gap-4 p-4">
+      {/* Sidebar filtres */}
       <div className="w-1/4 bg-white p-4 shadow rounded-2xl relative">
         <h2 className="text-lg font-bold mb-2">Filtres</h2>
         <label className="block mb-2">
@@ -90,6 +96,7 @@ export default function App() {
         </label>
       </div>
 
+      {/* Map */}
       <div className="flex-1 h-[600px]">
         <MapContainer center={coords} zoom={12} style={{ width: "100%", height: "100%" }}>
           <ChangeMapView coords={coords} />
@@ -114,5 +121,25 @@ export default function App() {
         </MapContainer>
       </div>
     </div>
+  );
+}
+
+// Composant principal App
+function AppContent() {
+  const { token, role } = useAuth();
+  if (!token) return <Login />;
+  return (
+    <div>
+      {role === "admin" && <Admin />}
+      <MapWithEvents />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
