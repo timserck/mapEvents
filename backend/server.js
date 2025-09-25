@@ -1,7 +1,8 @@
 import express from "express";
 import pkg from "pg";
-const { Pool } = pkg;
+import jwt from "jsonwebtoken";
 
+const { Pool } = pkg;
 const app = express();
 app.use(express.json());
 
@@ -13,7 +14,24 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-// GET /events
+// Secret JWT
+const SECRET = "monsecretJWT123";
+
+// Middleware pour vérifier le token et le rôle
+function authenticateAdmin(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    if (user.role !== "admin") return res.status(403).send("Accès refusé : admin uniquement");
+    req.user = user;
+    next();
+  });
+}
+
+// GET /events (public)
 app.get("/events", async (req, res) => {
   try {
     const { type, date, lat_min, lat_max, lon_min, lon_max } = req.query;
@@ -36,8 +54,8 @@ app.get("/events", async (req, res) => {
   }
 });
 
-// POST /events
-app.post("/events", async (req, res) => {
+// POST /events (admin uniquement)
+app.post("/events", authenticateAdmin, async (req, res) => {
   try {
     const { title, type, date, latitude, longitude } = req.body;
     const result = await pool.query(
@@ -49,6 +67,15 @@ app.post("/events", async (req, res) => {
     console.error(err);
     res.status(500).send("Erreur serveur");
   }
+});
+
+// Route pour générer un token (pour test)
+app.post("/login", (req, res) => {
+  const { username, role } = req.body;
+  // role peut être 'admin' ou 'user'
+  const user = { name: username, role };
+  const token = jwt.sign(user, SECRET, { expiresIn: "1h" });
+  res.json({ token });
 });
 
 app.listen(4000, () => console.log("Backend lancé sur http://localhost:4000"));
