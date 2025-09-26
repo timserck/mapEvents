@@ -1,8 +1,8 @@
-version: '3.8'
+version: "3.8"
 
 services:
   db:
-    image: postgis/postgis:15-3.3
+    build: ./db
     container_name: events_postgis
     restart: always
     environment:
@@ -10,9 +10,10 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
       POSTGRES_DB: eventsdb
     ports:
-      - "5432:5432"
+      - "5433:5432"   # évite conflit avec PostgreSQL local
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   backend:
     build: ./backend
@@ -24,10 +25,21 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: eventsdb
+      JWT_SECRET: supersecret
     ports:
       - "4000:4000"
     depends_on:
       - db
 
+  frontend:
+    build: ./frontend
+    container_name: events_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
 volumes:
   db_data:
+
