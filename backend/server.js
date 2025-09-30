@@ -1,81 +1,82 @@
-import express from "express";
-import pkg from "pg";
-import jwt from "jsonwebtoken";
-
-const { Pool } = pkg;
+const express = require("express");
 const app = express();
-app.use(express.json());
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const bodyParser = require("body-parser");
+const pool = require("./db");
+const cors = require("cors"); // ✅ ajouter cors
 
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
+const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
-// Secret JWT
-const SECRET = "monsecretJWT123";
+// Autoriser CORS depuis ton frontend
+app.use(cors({
+  origin: "http://localhost:3000", // adresse de ton frontend
+  credentials: true
+}));
 
-// Middleware pour vérifier le token et le rôle
-function authenticateAdmin(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
-  if (!token) return res.sendStatus(401);
+app.use(bodyParser.json());
 
-  jwt.verify(token, SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    if (user.role !== "admin") return res.status(403).send("Accès refusé : admin uniquement");
-    req.user = user;
+// Middleware auth
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "No token" });
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
     next();
-  });
+  } catch {
+    return res.status(403).json({ error: "Invalid token" });
+  }
 }
 
-// GET /events (public)
-app.get("/events", async (req, res) => {
+// Middleware admin uniquement
+function adminMiddleware(req, res, next) {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Admin only" });
+  next();
+}
+
+// Route login
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
   try {
-    const { type, date, lat_min, lat_max, lon_min, lon_max } = req.query;
-    let query = "SELECT * FROM events WHERE 1=1";
-    const params = [];
-
-    if (type) { params.push(type); query += ` AND type = $${params.length}`; }
-    if (date) { params.push(date); query += ` AND date = $${params.length}`; }
-    if (lat_min && lat_max && lon_min && lon_max) {
-      params.push(lat_min, lat_max, lon_min, lon_max);
-      query += ` AND latitude BETWEEN $${params.length-3} AND $${params.length-2}`;
-      query += ` AND longitude BETWEEN $${params.length-1} AND $${params.length}`;
-    }
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (result.rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+    const user = result.rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.status(401).json({ error: "Invalid credentials" });
+    const token = jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "1h" });
+    res.json({ token, role: user.role });
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Erreur serveur");
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// POST /events (admin uniquement)
-app.post("/events", authenticateAdmin, async (req, res) => {
+// Ajouter un événement (admin only)
+app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
+  const { title, type, date, latitude, longitude, description } = req.body;
   try {
-    const { title, type, date, latitude, longitude } = req.body;
     const result = await pool.query(
-      "INSERT INTO events (title, type, date, latitude, longitude) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-      [title, type, date, latitude, longitude]
+      "INSERT INTO events (title, type, date, description, location) VALUES ($1,$2,$3,$4,ST_GeogFromText($5)) RETURNING *",
+      [title, type, date, description, `SRID=4326;POINT(${longitude} ${latitude})`]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Erreur serveur");
+    console.error("Insert event error:", err);
+    res.status(500).json({ error: "DB insert error" });
   }
 });
 
-// Route pour générer un token (pour test)
-app.post("/login", (req, res) => {
-  const { username, role } = req.body;
-  // role peut être 'admin' ou 'user'
-  const user = { name: username, role };
-  const token = jwt.sign(user, SECRET, { expiresIn: "1h" });
-  res.json({ token });
+// Lire les événements (accessible à tous)
+app.get("/events", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT id, title, type, date, description, ST_X(location::geometry) AS longitude, ST_Y(location::geometry) AS latitude FROM events");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch events error:", err);
+    res.status(500).json({ error: "DB fetch error" });
+  }
 });
 
-app.listen(4000, () => console.log("Backend lancé sur http://localhost:4000"));
+app.listen(4000, () => console.log("Server running on port 4000"));

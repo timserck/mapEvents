@@ -1,3 +1,4 @@
+-- Extensions PostGIS
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
@@ -8,10 +9,10 @@ CREATE TABLE IF NOT EXISTS events (
     type VARCHAR(100),
     date DATE NOT NULL,
     description TEXT,
-    location GEOGRAPHY(POINT, 4326) NOT NULL  -- géolocalisation
+    location GEOGRAPHY(POINT, 4326) NOT NULL
 );
 
--- Exemple d’événement inséré automatiquement
+-- Exemple d’événement
 INSERT INTO events (title, type, date, description, location)
 VALUES (
     'Concert de Jazz',
@@ -19,4 +20,21 @@ VALUES (
     CURRENT_DATE + INTERVAL '7 days',
     'Concert en plein air au centre-ville',
     ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)')
+);
+
+-- Table des utilisateurs
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(20) NOT NULL
+);
+
+-- Ajouter un utilisateur admin
+-- Mot de passe : password
+INSERT INTO users (username, password_hash, role)
+VALUES (
+    'admin',
+    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'admin'
 );

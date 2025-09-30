@@ -1,14 +1,22 @@
-import { createContext, useState, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [role, setRole] = useState(null);
 
-  const login = (jwtToken, userRole) => {
-    setToken(jwtToken);
-    setRole(userRole);
+  const login = async (username, password) => {
+    // Replace with your backend login
+    const res = await fetch("http://localhost:4000/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) throw new Error("Login failed");
+    const data = await res.json();
+    setToken(data.token);
+    setRole(data.role);
   };
 
   const logout = () => {
@@ -21,8 +29,6 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export const useAuth = () => useContext(AuthContext);
