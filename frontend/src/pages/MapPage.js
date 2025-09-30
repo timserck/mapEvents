@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import ReactQuill from "react-quill";
 
-export default function MapPage({ role, token, isPanelOpen, togglePanel }) {
+export default function MapPage({ role, token, isPanelOpen }) {
   const [events, setEvents] = useState([]);
   const [editedEvent, setEditedEvent] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
