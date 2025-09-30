@@ -1,16 +1,31 @@
+import React, { useState } from "react";
 import { AuthProvider, useAuth } from "./AuthContext";
-import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
-
-function AppContent() {
-  const { token, role, logout } = useAuth();
-  return <MapPage role={role} logout={logout} />;
-}
+import Navbar from "./components/Navbar";
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <MainApp />
     </AuthProvider>
+  );
+}
+
+function MainApp() {
+  const { token, role } = useAuth();
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  const togglePanel = () => setIsPanelOpen((prev) => !prev);
+
+  return (
+    <div className="flex flex-col h-screen">
+      <Navbar togglePanel={togglePanel} />
+      <MapPage
+        role={role}
+        token={token}
+        isPanelOpen={isPanelOpen}
+        togglePanel={togglePanel}
+      />
+    </div>
   );
 }
