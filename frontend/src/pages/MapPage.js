@@ -1,13 +1,25 @@
+// MapPage.jsx
 import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import ReactQuill from "react-quill";
+import "../leafletIconFix";
 
-export default function MapPage({ role, token, isPanelOpen }) {
+// Helper to format date
+const formatDate = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("fr-FR"); // French formatting
+};
+
+export default function MapPage({ role, token, isPanelOpen, togglePanel }) {
   const [events, setEvents] = useState([]);
   const [editedEvent, setEditedEvent] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
+
+  const [filterType, setFilterType] = useState("all");
+  const [filterDate, setFilterDate] = useState("all");
 
   const isAdmin = role === "admin";
 
@@ -68,16 +80,52 @@ export default function MapPage({ role, token, isPanelOpen }) {
       });
   };
 
-  const totalPages = Math.ceil(events.length / pageSize);
-  const paginatedEvents = events.slice(
+  // Filter events
+  const filteredEvents = events.filter((e) => {
+    const typeMatch = filterType === "all" || e.type === filterType;
+    const dateMatch = filterDate === "all" || e.date === filterDate;
+    return typeMatch && dateMatch;
+  });
+
+  const totalPages = Math.ceil(filteredEvents.length / pageSize);
+  const paginatedEvents = filteredEvents.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
+  const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
+  const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
+
   return (
     <div className="flex h-screen">
-      {/* Map */}
-      <div className="flex-1">
+      {/* Map and filters */}
+      <div className="flex-1 flex flex-col">
+        <div className="p-2 flex gap-2 bg-gray-100">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="border rounded p-1"
+          >
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="border rounded p-1"
+          >
+            {uniqueDates.map((d) => (
+              <option key={d} value={d}>
+                {d === "all" ? "Tous" : formatDate(d)}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <MapContainer
           center={[48.8566, 2.3522]}
           zoom={12}
@@ -88,12 +136,12 @@ export default function MapPage({ role, token, isPanelOpen }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MarkerClusterGroup>
-            {events.map((e) => (
+            {filteredEvents.map((e) => (
               <Marker key={e.id} position={[e.latitude, e.longitude]}>
                 <Popup>
                   <h3>{e.title}</h3>
                   <p>
-                    {e.type} - {e.date}
+                    {e.type} - {formatDate(e.date)}
                   </p>
                   <div dangerouslySetInnerHTML={{ __html: e.description }} />
                 </Popup>
@@ -113,7 +161,7 @@ export default function MapPage({ role, token, isPanelOpen }) {
             Ajouter un événement
           </button>
 
-          {/* Events Table */}
+          {/* Table */}
           <table className="min-w-full border border-gray-300 mb-4">
             <thead className="bg-gray-200">
               <tr>
@@ -128,7 +176,7 @@ export default function MapPage({ role, token, isPanelOpen }) {
                 <tr key={e.id}>
                   <td className="border px-2 py-1">{e.title}</td>
                   <td className="border px-2 py-1">{e.type}</td>
-                  <td className="border px-2 py-1">{e.date}</td>
+                  <td className="border px-2 py-1">{formatDate(e.date)}</td>
                   <td className="border px-2 py-1 flex gap-2 justify-center">
                     <button
                       onClick={() => startEditing(e)}
@@ -171,7 +219,7 @@ export default function MapPage({ role, token, isPanelOpen }) {
             </button>
           </div>
 
-          {/* Event Editor */}
+          {/* Event editor */}
           {editedEvent && (
             <div className="bg-white p-4 shadow rounded flex flex-col">
               <h3>{editedEvent.id ? "Éditer l'événement" : "Nouvel événement"}</h3>
