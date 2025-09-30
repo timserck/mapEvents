@@ -19,12 +19,13 @@ function MainApp() {
 
   return (
     <div className="flex flex-col h-screen">
+      {/* Navbar handles the toggle */}
       <Navbar togglePanel={togglePanel} />
+      {/* MapPage receives only role, token, and panel state */}
       <MapPage
         role={role}
         token={token}
         isPanelOpen={isPanelOpen}
-        togglePanel={togglePanel}
       />
     </div>
   );

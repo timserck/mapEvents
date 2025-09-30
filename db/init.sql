@@ -9,16 +9,18 @@ CREATE TABLE IF NOT EXISTS events (
     type VARCHAR(100),
     date DATE NOT NULL,
     description TEXT,
+    address TEXT, -- Nouvelle colonne pour stocker l'adresse
     location GEOGRAPHY(POINT, 4326) NOT NULL
 );
 
 -- Exemple d’événement
-INSERT INTO events (title, type, date, description, location)
+INSERT INTO events (title, type, date, description, address, location)
 VALUES (
     'Concert de Jazz',
     'Concert',
     CURRENT_DATE + INTERVAL '7 days',
     'Concert en plein air au centre-ville',
+    'Paris, France',
     ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)')
 );
 
