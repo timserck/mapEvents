@@ -4,6 +4,7 @@ import MarkerClusterGroup from "react-leaflet-markercluster";
 import L from "leaflet";
 import "../leafletIconFix";
 import AdminPanel from "../components/AdminPanel";
+import { API_URL } from "../config";
 
 // Marqueur numéroté pour événements
 const createNumberedIcon = (number) =>
@@ -58,7 +59,7 @@ export default function MapPage({ role, isPanelOpen }) {
       return;
     }
     try {
-      const res = await fetch("http://localhost:4000/events");
+      const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
       setEvents(data);
     } catch (err) {

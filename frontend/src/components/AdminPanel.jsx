@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
+import { API_URL } from "../config";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 export default function AdminPanel({ refreshEvents }) {
@@ -33,7 +34,7 @@ export default function AdminPanel({ refreshEvents }) {
 
   // Fetch events
   const fetchAllEvents = async () => {
-    const res = await fetch("http://localhost:4000/events");
+    const res = await fetch(`${API_URL}/events`);
     const data = await res.json();
     data.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     setEvents(data);
@@ -47,8 +48,8 @@ export default function AdminPanel({ refreshEvents }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const url = editingEvent
-      ? `http://localhost:4000/events/${editingEvent.id}`
-      : "http://localhost:4000/events";
+      ? `${API_URL}/events/${editingEvent.id}`
+      : `${API_URL}/events`;
     const method = editingEvent ? "PUT" : "POST";
 
     await fetch(url, {
@@ -85,7 +86,7 @@ export default function AdminPanel({ refreshEvents }) {
 
   // Delete single event
   const handleDelete = async (id) => {
-    await fetch(`http://localhost:4000/events/${id}`, {
+    await fetch(`${API_URL}/events/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -96,7 +97,7 @@ export default function AdminPanel({ refreshEvents }) {
   // Delete all events
   const deleteAllEvents = async () => {
     if (!window.confirm("⚠️ Êtes-vous sûr de vouloir supprimer TOUS les événements ?")) return;
-    await fetch("http://localhost:4000/events", {
+    await fetch(`${API_URL}/events`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -108,7 +109,7 @@ export default function AdminPanel({ refreshEvents }) {
   const handleBulkUpload = async () => {
     try {
       const eventsData = JSON.parse(bulkInput);
-      const res = await fetch("http://localhost:4000/events/bulk", {
+      const res = await fetch(`${API_URL}/events/bulk`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -167,7 +168,7 @@ export default function AdminPanel({ refreshEvents }) {
 
     setEvents(items);
 
-    await fetch("http://localhost:4000/events/reorder", {
+    await fetch(`${API_URL}/events/reorder`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
