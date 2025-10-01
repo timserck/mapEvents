@@ -13,11 +13,35 @@ export default function AdminPanel({ refreshEvents }) {
   const [address, setAddress] = useState("");
   const [suggestions, setSuggestions] = useState([]);
 
+  const [bulkInput, setBulkInput] = useState("");
+  const [error, setError] = useState("");
+
   useEffect(() => {
     fetch("http://localhost:4000/events")
       .then((res) => res.json())
       .then(setEvents);
   }, [refreshEvents]);
+
+  const handleBulkUpload = async () => {
+    try {
+      const events = JSON.parse(bulkInput); // Coller un tableau JSON
+      const res = await fetch("http://localhost:4000/events/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ events }),
+      });
+      if (!res.ok) throw new Error("Bulk upload failed");
+      const data = await res.json();
+      refreshEvents(); // recharge la map
+      setBulkInput("");
+      alert(`${data.length} événements ajoutés`);
+    } catch (err) {
+      setError("Format JSON invalide ou erreur serveur");
+    }
+  };
 
   // Autocomplete for address
   const handleAddressChange = async (e) => {
@@ -204,6 +228,26 @@ export default function AdminPanel({ refreshEvents }) {
           ))}
         </tbody>
       </table>
+      <div className="w-full bg-white shadow-xl overflow-y-auto">
+        <h2 className="text-lg font-bold mb-2">Ajouter plusieurs événements</h2>
+
+        <textarea
+          value={bulkInput}
+          onChange={(e) => setBulkInput(e.target.value)}
+          placeholder='[{"title":"Concert","type":"Music","date":"2025-10-01","address":"Paris","description":"..."}]'
+          className="w-full h-40 border rounded p-2"
+        />
+
+        <button
+          onClick={handleBulkUpload}
+          className="bg-green-500 text-white px-4 py-2 mt-2 rounded hover:bg-green-600 transition"
+        >
+          Importer
+        </button>
+
+        {error && <p className="text-red-500 mt-2">{error}</p>}
+      </div>
+
     </div>
   );
 }

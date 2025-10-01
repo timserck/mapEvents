@@ -176,4 +176,46 @@ app.get("/events", async (req, res) => {
   }
 });
 
+// Bulk insert events (admin only)
+app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
+  const { events } = req.body; // tableau [{title, type, date, address, description, latitude, longitude}]
+  if (!Array.isArray(events) || events.length === 0) {
+    return res.status(400).json({ error: "Events array required" });
+  }
+
+  try {
+    const insertedEvents = [];
+
+    for (let ev of events) {
+      let { title, type, date, address, description, latitude, longitude } = ev;
+
+      // Si seulement l'adresse est fournie → géocoder
+      if (address && (!latitude || !longitude)) {
+        const geo = await geocodeAddress(address);
+        if (geo) {
+          latitude = geo.latitude;
+          longitude = geo.longitude;
+        }
+      }
+
+      const result = await pool.query(
+        `INSERT INTO events (title, type, date, description, address, location)
+         VALUES ($1,$2,$3,$4,$5, ST_GeogFromText($6))
+         RETURNING id, title, type, date, description, address,
+                   ST_Y(location::geometry) AS latitude,
+                   ST_X(location::geometry) AS longitude`,
+        [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`]
+      );
+
+      insertedEvents.push(result.rows[0]);
+    }
+
+    res.json(insertedEvents);
+  } catch (err) {
+    console.error("Bulk insert error:", err);
+    res.status(500).json({ error: "DB bulk insert error" });
+  }
+});
+
+
 app.listen(4000, () => console.log("🚀 Server running on port 4000"));

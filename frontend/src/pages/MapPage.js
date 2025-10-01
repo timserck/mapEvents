@@ -1,22 +1,33 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
+import L from "leaflet";
 import "../leafletIconFix";
 import AdminPanel from "../components/AdminPanel";
+
+// 🔵 Icône personnalisée pour la position de l'utilisateur
+const userIcon = new L.Icon({
+  iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
 
 export default function MapPage({ role, isPanelOpen }) {
   const [events, setEvents] = useState([]);
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
+  const [userPosition, setUserPosition] = useState(null);
   const mapRef = useRef();
   const [mapInstance, setMapInstance] = useState(null);
   const isAdmin = role === "admin";
 
+  // Charger les événements
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (mapRef.current) {
-        mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
+      if (mapInstance) {
+        mapInstance.setView([newEvent.latitude, newEvent.longitude], 14);
       }
       return;
     }
@@ -33,6 +44,20 @@ export default function MapPage({ role, isPanelOpen }) {
     fetchEvents();
   }, []);
 
+  // Récupérer et centrer sur la position de l'utilisateur
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserPosition([latitude, longitude]);
+        if (mapInstance) {
+          mapInstance.setView([latitude, longitude], 14);
+        }
+      },
+      (err) => console.error("Geolocation error:", err)
+    );
+  }, [mapInstance]);
+
   const filteredEvents = events.filter(
     (e) =>
       (filterType === "all" || e.type === filterType) &&
@@ -40,24 +65,12 @@ export default function MapPage({ role, isPanelOpen }) {
   );
 
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
-
-  const uniqueDates = [
-    "all",
-    ...Array.from(new Set(events.map((e) => e.date))),
-  ].map((d) => ({
-    value: d,
-    label: d === "all" ? "all" : new Date(d).toLocaleDateString("fr-FR"),
-  }));
+  const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
   const goToCurrentPosition = () => {
-    if (!mapInstance) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        mapInstance.setView([latitude, longitude], 12);
-      },
-      (err) => console.error(err)
-    );
+    if (mapInstance && userPosition) {
+      mapInstance.setView(userPosition, 14);
+    }
   };
 
   const formatDate = (d) =>
@@ -70,7 +83,7 @@ export default function MapPage({ role, isPanelOpen }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filters */}
+        {/* Filtres + Bouton Ma position */}
         <div className="p-2 flex gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -90,8 +103,8 @@ export default function MapPage({ role, isPanelOpen }) {
             className="border rounded p-1"
           >
             {uniqueDates.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
+              <option key={d} value={d}>
+                {formatDate(d)}
               </option>
             ))}
           </select>
@@ -104,7 +117,7 @@ export default function MapPage({ role, isPanelOpen }) {
           </button>
         </div>
 
-        {/* Map */}
+        {/* Carte */}
         <MapContainer
           ref={mapRef}
           center={[48.8566, 2.3522]}
@@ -116,6 +129,15 @@ export default function MapPage({ role, isPanelOpen }) {
             attribution="&copy; OpenStreetMap"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+
+          {/* Position de l'utilisateur */}
+          {userPosition && (
+            <Marker position={userPosition} icon={userIcon}>
+              <Popup>📍 Vous êtes ici</Popup>
+            </Marker>
+          )}
+
+          {/* Marqueurs d'événements */}
           <MarkerClusterGroup>
             {filteredEvents.map((e) => (
               <Marker key={e.id} position={[e.latitude, e.longitude]}>
@@ -125,16 +147,15 @@ export default function MapPage({ role, isPanelOpen }) {
                     {e.type} - {formatDate(e.date)}
                   </p>
                   <p>{e.address}</p>
-                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
-                  {/* Google Maps link */}
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${e.latitude},${e.longitude}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 underline mt-2 block"
+                    className="text-blue-600 underline"
                   >
-                    Obtenir l’itinéraire
+                    🚗 Itinéraire Google Maps
                   </a>
+                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
                 </Popup>
               </Marker>
             ))}
@@ -142,7 +163,7 @@ export default function MapPage({ role, isPanelOpen }) {
         </MapContainer>
       </div>
 
-      {/* Admin Panel */}
+      {/* Panel Admin si admin et ouvert */}
       {isAdmin && isPanelOpen && <AdminPanel refreshEvents={fetchEvents} />}
     </div>
   );
