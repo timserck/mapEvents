@@ -1,5 +1,5 @@
-# Use Node 18 for compatibility
-FROM node:18-alpine
+# Use Node 20 on Debian Bookworm (multi-arch, better for Raspberry Pi)
+FROM node:20-bookworm-slim
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
+# Install dependencies (ci for reproducibility)
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . .

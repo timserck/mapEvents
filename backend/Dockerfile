@@ -1,9 +1,13 @@
-FROM node:20
+FROM node:20-bookworm
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# Install build deps for native modules like bcrypt on ARM
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 build-essential g++ make \
+  && rm -rf /var/lib/apt/lists/* \
+  && npm ci --omit=dev
 
 COPY . .
 
