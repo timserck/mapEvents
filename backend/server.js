@@ -10,10 +10,22 @@ const fetch = require("node-fetch");
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
 
 // Enable CORS
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://192.168.1.190:3000",
+];
+
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // allow non-browser clients
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 200,
   })
 );
 
