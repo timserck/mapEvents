@@ -35,7 +35,6 @@ export default function AdminPanel({ refreshEvents }) {
   const fetchAllEvents = async () => {
     const res = await fetch("http://localhost:4000/events");
     const data = await res.json();
-    // Sort by order_index
     data.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     setEvents(data);
   };
@@ -127,17 +126,30 @@ export default function AdminPanel({ refreshEvents }) {
     }
   };
 
-  // Address autocomplete
+  // Photon autocomplete
   const handleAddressChange = async (e) => {
     const value = e.target.value;
     setAddress(value);
+
     if (value.length > 3) {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(value)}&limit=5`
-      );
-      const data = await res.json();
-      setSuggestions(data);
-    } else setSuggestions([]);
+      try {
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=5`);
+        const data = await res.json();
+        const formattedSuggestions = data.features.map(f => ({
+          display_name: f.properties.name
+            ? f.properties.name + (f.properties.city ? `, ${f.properties.city}` : "")
+            : f.properties.street || "",
+          lat: f.geometry.coordinates[1],
+          lon: f.geometry.coordinates[0]
+        }));
+        setSuggestions(formattedSuggestions);
+      } catch (err) {
+        console.error("Autocomplete Photon error:", err);
+        setSuggestions([]);
+      }
+    } else {
+      setSuggestions([]);
+    }
   };
 
   const handleSelectSuggestion = (sugg) => {

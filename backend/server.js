@@ -235,26 +235,8 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
 
 
 
-app.patch("/:id/position", authMiddleware, async (req, res) => {
-  try {
-    const { position } = req.body;
-    const { id } = req.params;
 
-    const result = await pool.query(
-      "UPDATE events SET position = $1 WHERE id = $2 RETURNING *",
-      [position, id]
-    );
-
-    if (result.rows.length === 0) return res.status(404).json({ message: "Événement non trouvé" });
-
-    res.json({ success: true, event: result.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Erreur serveur" });
-  }
-});
-
-app.patch("/reorder", authMiddleware, adminMiddleware, async (req, res) => {
+app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { orderedIds } = req.body; // tableau d'IDs dans le nouvel ordre
     const queries = orderedIds.map((id, idx) =>
