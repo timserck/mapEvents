@@ -13,7 +13,23 @@ export default function AdminPanel({ refreshEvents }) {
   const [address, setAddress] = useState("");
   const [suggestions, setSuggestions] = useState([]);
 
-  const [bulkInput, setBulkInput] = useState("");
+  const [bulkInput, setBulkInput] =useState(`[
+    {
+      "title": "Concert Rock",
+      "type": "Concert",
+      "date": "2025-11-01",
+      "address": "Lyon, France",
+      "description": "Un super concert en plein air"
+    },
+    {
+      "title": "Expo d'art",
+      "type": "Exposition",
+      "date": "2025-12-15",
+      "address": "Marseille, France",
+      "description": "Galerie d'art moderne"
+    }
+  ]`);
+  
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -21,6 +37,24 @@ export default function AdminPanel({ refreshEvents }) {
       .then((res) => res.json())
       .then(setEvents);
   }, [refreshEvents]);
+
+
+  const deleteAllEvents = async () => {
+    if (!window.confirm("⚠️ Êtes-vous sûr de vouloir supprimer TOUS les événements ?")) return;
+
+    try {
+      const res = await fetch("http://localhost:4000/events", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Erreur lors de la suppression");
+      refreshEvents(); // recharge la liste
+    } catch (err) {
+      console.error("Delete all error:", err);
+      alert("Erreur lors de la suppression des événements");
+    }
+  };
+
 
   const handleBulkUpload = async () => {
     try {
@@ -228,7 +262,7 @@ export default function AdminPanel({ refreshEvents }) {
           ))}
         </tbody>
       </table>
-      <div className="w-full bg-white shadow-xl overflow-y-auto">
+      <div className="w-full  bg-white p-4 rounded shadow  overflow-y-auto">
         <h2 className="text-lg font-bold mb-2">Ajouter plusieurs événements</h2>
 
         <textarea
@@ -246,7 +280,16 @@ export default function AdminPanel({ refreshEvents }) {
         </button>
 
         {error && <p className="text-red-500 mt-2">{error}</p>}
+
       </div>
+
+      {/* bouton suppression */}
+      <button
+        onClick={deleteAllEvents}
+        className="bg-red-600 text-white px-4 py-2  mt-2 rounded hover:bg-red-700 w-full transition"
+      >
+        Supprimer tous les événements
+      </button>
 
     </div>
   );

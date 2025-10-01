@@ -176,6 +176,18 @@ app.get("/events", async (req, res) => {
   }
 });
 
+// Delete all events (admin only)
+app.delete("/events", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM events");
+    res.json({ success: true, message: "All events deleted" });
+  } catch (err) {
+    console.error("Delete all events error:", err);
+    res.status(500).json({ error: "DB delete all error" });
+  }
+});
+
+
 // Bulk insert events (admin only)
 app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
   const { events } = req.body; // tableau [{title, type, date, address, description, latitude, longitude}]

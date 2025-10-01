@@ -5,12 +5,42 @@ import L from "leaflet";
 import "../leafletIconFix";
 import AdminPanel from "../components/AdminPanel";
 
-// 🔵 Icône personnalisée pour la position de l'utilisateur
-const userIcon = new L.Icon({
-  iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+// Marqueur numéroté
+const createNumberedIcon = (number) =>
+  L.divIcon({
+    html: `<div style="
+      background:#2563eb;
+      color:white;
+      border-radius:50%;
+      width:28px;
+      height:28px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:bold;
+      border:2px solid white;
+      box-shadow:0 0 4px rgba(0,0,0,0.3);
+    ">${number}</div>`,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+
+// Icône spéciale pour la position actuelle
+const myPositionIcon = L.divIcon({
+  html: `<div style="
+    background:red;
+    border-radius:50%;
+    width:20px;
+    height:20px;
+    border:3px solid white;
+    box-shadow:0 0 6px rgba(0,0,0,0.4);
+  "></div>`,
+  className: "",
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
 });
 
 export default function MapPage({ role, isPanelOpen }) {
@@ -19,15 +49,13 @@ export default function MapPage({ role, isPanelOpen }) {
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
   const mapRef = useRef();
-  const [mapInstance, setMapInstance] = useState(null);
   const isAdmin = role === "admin";
 
-  // Charger les événements
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (mapInstance) {
-        mapInstance.setView([newEvent.latitude, newEvent.longitude], 14);
+      if (mapRef.current) {
+        mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
       }
       return;
     }
@@ -44,19 +72,21 @@ export default function MapPage({ role, isPanelOpen }) {
     fetchEvents();
   }, []);
 
-  // Récupérer et centrer sur la position de l'utilisateur
-  useEffect(() => {
+  // Récupérer la position de l’utilisateur
+  const goToCurrentPosition = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
         setUserPosition([latitude, longitude]);
-        if (mapInstance) {
-          mapInstance.setView([latitude, longitude], 14);
+        if (mapRef.current) {
+          mapRef.current.setView([latitude, longitude], 14); // fonctionne maintenant ✅
         }
       },
-      (err) => console.error("Geolocation error:", err)
+      (err) => console.error("Erreur géolocalisation:", err),
+      { enableHighAccuracy: true }
     );
-  }, [mapInstance]);
+  };
+
 
   const filteredEvents = events.filter(
     (e) =>
@@ -66,12 +96,6 @@ export default function MapPage({ role, isPanelOpen }) {
 
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
-
-  const goToCurrentPosition = () => {
-    if (mapInstance && userPosition) {
-      mapInstance.setView(userPosition, 14);
-    }
-  };
 
   const formatDate = (d) =>
     new Date(d).toLocaleDateString("fr-FR", {
@@ -83,7 +107,7 @@ export default function MapPage({ role, isPanelOpen }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres + Bouton Ma position */}
+        {/* Filtres */}
         <div className="p-2 flex gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -104,7 +128,7 @@ export default function MapPage({ role, isPanelOpen }) {
           >
             {uniqueDates.map((d) => (
               <option key={d} value={d}>
-                {formatDate(d)}
+                {d}
               </option>
             ))}
           </select>
@@ -123,47 +147,51 @@ export default function MapPage({ role, isPanelOpen }) {
           center={[48.8566, 2.3522]}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
-          whenCreated={setMapInstance}
+          whenCreated={(map) => (mapRef.current = map)} // on stocke la vraie instance Leaflet
+
         >
           <TileLayer
             attribution="&copy; OpenStreetMap"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Position de l'utilisateur */}
-          {userPosition && (
-            <Marker position={userPosition} icon={userIcon}>
-              <Popup>📍 Vous êtes ici</Popup>
-            </Marker>
-          )}
-
-          {/* Marqueurs d'événements */}
+          {/* Marqueurs des événements */}
           <MarkerClusterGroup>
-            {filteredEvents.map((e) => (
-              <Marker key={e.id} position={[e.latitude, e.longitude]}>
+            {filteredEvents.map((e, index) => (
+              <Marker
+                key={e.id}
+                position={[e.latitude, e.longitude]}
+                icon={createNumberedIcon(index + 1)}
+              >
                 <Popup>
                   <h3>{e.title}</h3>
                   <p>
                     {e.type} - {formatDate(e.date)}
                   </p>
                   <p>{e.address}</p>
+                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${e.latitude},${e.longitude}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 underline"
                   >
-                    🚗 Itinéraire Google Maps
+                    Itinéraire Google Maps
                   </a>
-                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
                 </Popup>
               </Marker>
             ))}
           </MarkerClusterGroup>
+
+          {/* Marqueur de la position de l’utilisateur */}
+          {userPosition && (
+            <Marker position={userPosition} icon={myPositionIcon}>
+              <Popup>📍 Vous êtes ici</Popup>
+            </Marker>
+          )}
         </MapContainer>
       </div>
 
-      {/* Panel Admin si admin et ouvert */}
       {isAdmin && isPanelOpen && <AdminPanel refreshEvents={fetchEvents} />}
     </div>
   );
