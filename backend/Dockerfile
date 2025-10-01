@@ -7,7 +7,7 @@ COPY package*.json ./
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 build-essential g++ make \
   && rm -rf /var/lib/apt/lists/* \
-  && npm ci --omit=dev
+  && npm install --omit=dev --no-audit --no-fund
 
 COPY . .
 
