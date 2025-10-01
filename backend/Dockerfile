@@ -1,5 +1,10 @@
 FROM node:20-bookworm
 
+# Reduce memory pressure during npm install on low-RAM devices
+ENV npm_config_jobs=1 \
+    npm_config_loglevel=warn \
+    npm_config_progress=false
+
 WORKDIR /app
 
 COPY package*.json ./

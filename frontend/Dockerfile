@@ -1,6 +1,12 @@
 # Use Node 20 on Debian Bookworm (multi-arch, better for Raspberry Pi)
 FROM node:20-bookworm-slim
 
+# Lower memory usage for install and build
+ENV npm_config_jobs=1 \
+    npm_config_loglevel=warn \
+    npm_config_progress=false \
+    NODE_OPTIONS=--max-old-space-size=512
+
 # Set working directory
 WORKDIR /app
 
