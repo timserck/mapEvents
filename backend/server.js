@@ -87,27 +87,22 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// Create event
 app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
-  let { title, type, date, description, address, latitude, longitude } = req.body;
-
-  // Geocode if address provided but no coordinates
-  if (address && (!latitude || !longitude)) {
-    const geo = await geocodeAddress(address);
-    if (geo) {
-      latitude = geo.latitude;
-      longitude = geo.longitude;
-    }
-  }
+  let { title, type, date, latitude, longitude, description, address, position } = req.body;
 
   try {
+    if (!position) {
+      const posRes = await pool.query("SELECT COALESCE(MAX(position), 0) + 1 AS next", []);
+      position = posRes.rows[0].next;
+    }
+
     const result = await pool.query(
-      `INSERT INTO events (title, type, date, description, address, location)
-       VALUES ($1,$2,$3,$4,$5, ST_GeogFromText($6))
-       RETURNING id, title, type, date, description, address,
+      `INSERT INTO events (title, type, date, description, address, location, position)
+       VALUES ($1,$2,$3,$4,$5, ST_GeogFromText($6), $7)
+       RETURNING id, title, type, date, description, address, position,
                  ST_Y(location::geometry) AS latitude,
                  ST_X(location::geometry) AS longitude`,
-      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`]
+      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, position]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -115,6 +110,7 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
     res.status(500).json({ error: "DB insert error" });
   }
 });
+
 
 // Update event
 app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
@@ -163,11 +159,18 @@ app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
 app.get("/events", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, title, type, date, description, address,
-             CASE WHEN location IS NOT NULL THEN ST_Y(location::geometry) ELSE NULL END AS latitude,
-             CASE WHEN location IS NOT NULL THEN ST_X(location::geometry) ELSE NULL END AS longitude
+      SELECT
+        id,
+        title,
+        type,
+        date,
+        description,
+        address,
+        position,
+        CASE WHEN location IS NOT NULL THEN ST_Y(location::geometry) ELSE NULL END AS latitude,
+        CASE WHEN location IS NOT NULL THEN ST_X(location::geometry) ELSE NULL END AS longitude
       FROM events
-      ORDER BY date DESC
+      ORDER BY position ASC
     `);
     res.json(result.rows);
   } catch (err) {
@@ -175,6 +178,7 @@ app.get("/events", async (req, res) => {
     res.status(500).json({ error: "DB fetch error" });
   }
 });
+
 
 // Delete all events (admin only)
 app.delete("/events", authMiddleware, adminMiddleware, async (req, res) => {
@@ -228,6 +232,45 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
     res.status(500).json({ error: "DB bulk insert error" });
   }
 });
+
+
+
+app.patch("/:id/position", authMiddleware, async (req, res) => {
+  try {
+    const { position } = req.body;
+    const { id } = req.params;
+
+    const result = await pool.query(
+      "UPDATE events SET position = $1 WHERE id = $2 RETURNING *",
+      [position, id]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ message: "Événement non trouvé" });
+
+    res.json({ success: true, event: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+app.patch("/reorder", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { orderedIds } = req.body; // tableau d'IDs dans le nouvel ordre
+    const queries = orderedIds.map((id, idx) =>
+      pool.query("UPDATE events SET order_index = $1 WHERE id = $2", [idx, id])
+    );
+    await Promise.all(queries);
+
+    const result = await pool.query("SELECT * FROM events ORDER BY order_index ASC");
+    res.json({ success: true, events: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur lors du réordonnancement" });
+  }
+});
+
+
 
 
 app.listen(4000, () => console.log("🚀 Server running on port 4000"));

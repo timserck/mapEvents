@@ -5,7 +5,7 @@ import L from "leaflet";
 import "../leafletIconFix";
 import AdminPanel from "../components/AdminPanel";
 
-// Marqueur numéroté
+// Marqueur numéroté pour événements
 const createNumberedIcon = (number) =>
   L.divIcon({
     html: `<div style="
@@ -28,7 +28,7 @@ const createNumberedIcon = (number) =>
     popupAnchor: [0, -14],
   });
 
-// Icône spéciale pour la position actuelle
+// Icône pour la position de l’utilisateur
 const myPositionIcon = L.divIcon({
   html: `<div style="
     background:red;
@@ -54,9 +54,7 @@ export default function MapPage({ role, isPanelOpen }) {
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (mapRef.current) {
-        mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
-      }
+      if (mapRef.current) mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
       return;
     }
     try {
@@ -72,21 +70,17 @@ export default function MapPage({ role, isPanelOpen }) {
     fetchEvents();
   }, []);
 
-  // Récupérer la position de l’utilisateur
   const goToCurrentPosition = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
         setUserPosition([latitude, longitude]);
-        if (mapRef.current) {
-          mapRef.current.setView([latitude, longitude], 14); // fonctionne maintenant ✅
-        }
+        if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
       },
       (err) => console.error("Erreur géolocalisation:", err),
       { enableHighAccuracy: true }
     );
   };
-
 
   const filteredEvents = events.filter(
     (e) =>
@@ -98,11 +92,7 @@ export default function MapPage({ role, isPanelOpen }) {
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
   const formatDate = (d) =>
-    new Date(d).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+    new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return (
     <div className="flex h-screen">
@@ -115,9 +105,7 @@ export default function MapPage({ role, isPanelOpen }) {
             className="border rounded p-1"
           >
             {uniqueTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
 
@@ -127,9 +115,7 @@ export default function MapPage({ role, isPanelOpen }) {
             className="border rounded p-1"
           >
             {uniqueDates.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
+              <option key={d} value={d}>{d}</option>
             ))}
           </select>
 
@@ -147,15 +133,13 @@ export default function MapPage({ role, isPanelOpen }) {
           center={[48.8566, 2.3522]}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
-          whenCreated={(map) => (mapRef.current = map)} // on stocke la vraie instance Leaflet
-
+          whenCreated={(map) => (mapRef.current = map)}
         >
           <TileLayer
             attribution="&copy; OpenStreetMap"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Marqueurs des événements */}
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
               <Marker
@@ -164,26 +148,23 @@ export default function MapPage({ role, isPanelOpen }) {
                 icon={createNumberedIcon(index + 1)}
               >
                 <Popup>
-                  <h3>{e.title}</h3>
-                  <p>
-                    {e.type} - {formatDate(e.date)}
-                  </p>
+                  <strong>{index + 1}. {e.title}</strong>
+                  <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div dangerouslySetInnerHTML={{ __html: e.description }} />
                   <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${e.latitude},${e.longitude}`}
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
                     target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline"
+                    rel="noreferrer"
+                    className="text-blue-500 underline"
                   >
-                    Itinéraire Google Maps
+                    🚗 Itinéraire Google Maps
                   </a>
                 </Popup>
               </Marker>
             ))}
           </MarkerClusterGroup>
 
-          {/* Marqueur de la position de l’utilisateur */}
           {userPosition && (
             <Marker position={userPosition} icon={myPositionIcon}>
               <Popup>📍 Vous êtes ici</Popup>
