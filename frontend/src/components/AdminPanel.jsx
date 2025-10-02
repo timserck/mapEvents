@@ -180,7 +180,7 @@ export default function AdminPanel({ refreshEvents }) {
   };
 
   return (
-    <div className="w-full md:w-1/3 h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
+    <div className="w-full md:w-2/5 lg:w-1/3 xl:w-1/4 h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
       {/* Form */}
@@ -278,62 +278,64 @@ export default function AdminPanel({ refreshEvents }) {
 
       {/* Events Table with Drag & Drop */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="events">
-          {(provided) => (
-            <table
-              className="w-full border mt-2 text-sm"
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-            >
-              <thead>
-                <tr className="bg-gray-200">
-                  <th className="border p-2">Titre</th>
-                  <th className="border p-2">Type</th>
-                  <th className="border p-2">Date</th>
-                  <th className="border p-2">Adresse</th>
-                  <th className="border p-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((e, index) => (
-                  <Draggable key={e.id} draggableId={e.id.toString()} index={index}>
-                    {(provided) => (
-                      <tr
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        <td className="border p-2">{e.title}</td>
-                        <td className="border p-2">{e.type}</td>
-                        <td className="border p-2">
-                          {new Date(e.date).toLocaleDateString("fr-FR")}
-                        </td>
-                        <td className="border p-2">{e.address}</td>
-                        <td className="border p-2 flex gap-2">
-                          <button
-                            onClick={() => startEditing(e)}
-                            className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
-                          >
-                            Éditer
-                          </button>
-                          <button
-                            onClick={() => handleDelete(e.id)}
-                            className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                          >
-                            Supprimer
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </tbody>
-            </table>
-          )}
-        </Droppable>
-      </DragDropContext>
+      <div className="overflow-x-auto">
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="events">
+            {(provided) => (
+              <table
+                className="min-w-[600px] w-full border mt-2 text-sm"
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+              >
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="border p-2">Titre</th>
+                    <th className="border p-2">Type</th>
+                    <th className="border p-2">Date</th>
+                    <th className="border p-2">Adresse</th>
+                    <th className="border p-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((e, index) => (
+                    <Draggable key={e.id} draggableId={e.id.toString()} index={index}>
+                      {(provided) => (
+                        <tr
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                        >
+                          <td className="border p-2">{e.title}</td>
+                          <td className="border p-2">{e.type}</td>
+                          <td className="border p-2">
+                            {new Date(e.date).toLocaleDateString("fr-FR")}
+                          </td>
+                          <td className="border p-2">{e.address}</td>
+                          <td className="border p-2 flex gap-2">
+                            <button
+                              onClick={() => startEditing(e)}
+                              className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
+                            >
+                              Éditer
+                            </button>
+                            <button
+                              onClick={() => handleDelete(e.id)}
+                              className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
+                            >
+                              Supprimer
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </tbody>
+              </table>
+            )}
+          </Droppable>
+        </DragDropContext>
+      </div>
 
       {/* Delete All */}
       <div className="w-full p-4">
