@@ -60,6 +60,11 @@ export default function MapPage({ role, isPanelOpen }) {
     }
     try {
       const res = await fetch(`${API_URL}/events`);
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(`Expected JSON, got: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       setEvents(data);
     } catch (err) {
