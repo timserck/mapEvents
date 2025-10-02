@@ -217,7 +217,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       {isAdmin && isPanelOpen && (
         <div className="fixed inset-0 md:static z-50 md:z-auto">
           <div className="absolute inset-0 bg-black/40 md:hidden" onClick={onCloseAdminPanel} />
-          <div className="absolute inset-y-0 right-0 w-full md:w-2/5 lg:w-1/3 xl:w-1/4 bg-white md:bg-transparent md:relative md:h-full flex flex-col">
+          <div className="absolute inset-y-0 right-0 w-full bg-white md:bg-transparent md:relative md:h-full flex flex-col">
             <div className="md:hidden flex items-center justify-between p-3 border-b bg-white">
               <h3 className="font-semibold">Panel Admin</h3>
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
