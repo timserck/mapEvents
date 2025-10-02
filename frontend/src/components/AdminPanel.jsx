@@ -180,7 +180,7 @@ export default function AdminPanel({ refreshEvents }) {
   };
 
   return (
-    <div className="w-1/3 h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
+    <div className="w-full md:w-1/3 h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
       {/* Form */}

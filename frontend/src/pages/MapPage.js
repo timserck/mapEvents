@@ -44,7 +44,7 @@ const myPositionIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
-export default function MapPage({ role, isPanelOpen }) {
+export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
@@ -104,33 +104,38 @@ export default function MapPage({ role, isPanelOpen }) {
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
         {/* Filtres */}
-        <div className="p-2 flex gap-2 bg-gray-100">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="border rounded p-1"
-          >
-            {uniqueTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+        <div className="p-2 bg-gray-100">
+          <details className="md:open">
+            <summary className="md:hidden cursor-pointer select-none">Filtres</summary>
+            <div className="mt-2 flex flex-col md:flex-row gap-2">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="border rounded p-2"
+              >
+                {uniqueTypes.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
 
-          <select
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="border rounded p-1"
-          >
-            {uniqueDates.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
+              <select
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="border rounded p-2"
+              >
+                {uniqueDates.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
 
-          <button
-            onClick={goToCurrentPosition}
-            className="bg-blue-500 text-white px-3 py-1 rounded"
-          >
-            Ma position
-          </button>
+              <button
+                onClick={goToCurrentPosition}
+                className="bg-blue-500 text-white px-3 py-2 rounded"
+              >
+                Ma position
+              </button>
+            </div>
+          </details>
         </div>
 
         {/* Carte */}
@@ -179,7 +184,20 @@ export default function MapPage({ role, isPanelOpen }) {
         </MapContainer>
       </div>
 
-      {isAdmin && isPanelOpen && <AdminPanel refreshEvents={fetchEvents} />}
+      {isAdmin && isPanelOpen && (
+        <div className="fixed inset-0 md:static z-50 md:z-auto">
+          <div className="absolute inset-0 bg-black/40 md:hidden" onClick={onCloseAdminPanel} />
+          <div className="absolute inset-y-0 right-0 w-full md:w-1/3 bg-white md:bg-transparent md:relative md:h-full flex flex-col">
+            <div className="md:hidden flex items-center justify-between p-3 border-b bg-white">
+              <h3 className="font-semibold">Panel Admin</h3>
+              <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <AdminPanel refreshEvents={fetchEvents} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

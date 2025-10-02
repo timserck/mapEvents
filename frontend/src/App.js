@@ -16,6 +16,7 @@ function MainApp() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const togglePanel = () => setIsPanelOpen((prev) => !prev);
+  const closePanel = () => setIsPanelOpen(false);
 
   return (
     <div className="flex flex-col min-h-screen-mobile">
@@ -26,6 +27,7 @@ function MainApp() {
         role={role}
         token={token}
         isPanelOpen={isPanelOpen}
+        onCloseAdminPanel={closePanel}
       />
     </div>
   );
