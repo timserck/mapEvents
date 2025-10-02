@@ -7,6 +7,7 @@ export default function Navbar({ togglePanel }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -22,15 +23,16 @@ export default function Navbar({ togglePanel }) {
   };
 
   return (
-    <nav className="bg-gray-800 text-white flex items-center justify-between px-6 py-3 shadow-md gap-2 overflow-x-auto whitespace-nowrap">
-      <div className="text-xl font-bold mr-4">Carte des événements</div>
+    <nav className="bg-gray-800 text-white relative flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
+      <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Carte des événements</div>
 
-      <div className="flex items-center gap-3 flex-nowrap overflow-x-auto whitespace-nowrap">
+      {/* Desktop/Tablet controls */}
+      <div className="hidden md:flex items-center gap-2 md:gap-3 flex-nowrap min-w-0 flex-1 justify-end">
         {/* Admin panel toggle button */}
         {token && role === "admin" && (
           <button
             onClick={togglePanel}
-            className="bg-blue-500 px-3 py-2 rounded hover:bg-blue-600 transition"
+            className="bg-blue-500 px-2 md:px-3 py-2 rounded hover:bg-blue-600 transition"
           >
             Panel Admin
           </button>
@@ -40,14 +42,14 @@ export default function Navbar({ togglePanel }) {
         {!token ? (
           <form
             onSubmit={handleLogin}
-            className="flex flex-row gap-2 items-center flex-nowrap"
+            className="flex flex-row gap-2 items-center flex-nowrap min-w-0"
           >
             <input
               type="text"
               placeholder="Nom d'utilisateur"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="p-2 rounded border w-32 md:w-48 text-black"
+              className="p-2 rounded border w-24 md:w-40 text-black min-w-0"
               required
             />
             <input
@@ -55,29 +57,94 @@ export default function Navbar({ togglePanel }) {
               placeholder="Mot de passe"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="p-2 rounded border w-32 md:w-48 text-black"
+              className="p-2 rounded border w-24 md:w-40 text-black min-w-0"
               required
             />
             <button
               type="submit"
-              className="bg-green-500 px-3 py-2 rounded hover:bg-green-600 transition"
+              className="bg-green-500 px-2 md:px-3 py-2 rounded hover:bg-green-600 transition"
             >
               Se connecter
             </button>
-            {error && <span className="text-red-500">{error}</span>}
+            {error && <span className="text-red-500 hidden md:inline">{error}</span>}
           </form>
         ) : (
-          <div className="flex items-center gap-3 flex-nowrap">
-            <span>Rôle : {role}</span>
+          <div className="flex items-center gap-2 md:gap-3 flex-nowrap min-w-0">
+            <span className="truncate max-w-[120px] md:max-w-none">Rôle : {role}</span>
             <button
               onClick={logout}
-              className="bg-red-500 px-3 py-2 rounded hover:bg-red-600 transition"
+              className="bg-red-500 px-2 md:px-3 py-2 rounded hover:bg-red-600 transition"
             >
               Déconnexion
             </button>
           </div>
         )}
       </div>
+
+      {/* Mobile hamburger */}
+      <button
+        className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded hover:bg-gray-700"
+        aria-label="Menu"
+        onClick={() => setIsMenuOpen((v) => !v)}
+      >
+        <span className="block w-5 h-0.5 bg-white mb-1"></span>
+        <span className="block w-5 h-0.5 bg-white mb-1"></span>
+        <span className="block w-5 h-0.5 bg-white"></span>
+      </button>
+
+      {/* Mobile dropdown menu */}
+      {isMenuOpen && (
+        <div className="md:hidden absolute top-full left-0 right-0 bg-gray-800 border-t border-gray-700 z-50">
+          <div className="px-4 py-3 flex flex-col gap-3">
+            {token && role === "admin" && (
+              <button
+                onClick={() => { setIsMenuOpen(false); togglePanel(); }}
+                className="bg-blue-500 px-3 py-2 rounded hover:bg-blue-600 transition text-left"
+              >
+                Panel Admin
+              </button>
+            )}
+
+            {!token ? (
+              <form onSubmit={handleLogin} className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  placeholder="Nom d'utilisateur"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="p-2 rounded border text-black"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Mot de passe"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="p-2 rounded border text-black"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="bg-green-500 px-3 py-2 rounded hover:bg-green-600 transition"
+                >
+                  Se connecter
+                </button>
+                {error && <span className="text-red-400">{error}</span>}
+              </form>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span>Rôle : {role}</span>
+                <button
+                  onClick={() => { setIsMenuOpen(false); logout(); }}
+                  className="bg-red-500 px-3 py-2 rounded hover:bg-red-600 transition"
+                >
+                  Déconnexion
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
