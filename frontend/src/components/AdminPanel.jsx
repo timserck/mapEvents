@@ -278,7 +278,7 @@ export default function AdminPanel({ refreshEvents }) {
 
       {/* Events Table with Drag & Drop */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto min-h-[600px]">
         <DragDropContext onDragEnd={handleDragEnd}>
           <Droppable droppableId="events">
             {(provided) => (
