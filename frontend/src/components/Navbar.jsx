@@ -23,7 +23,7 @@ export default function Navbar({ togglePanel }) {
   };
 
   return (
-    <nav className="bg-gray-800 text-white relative z-[1000] flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
+    <nav className="bg-gray-800 text-white relative z-[3000] flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
       <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Carte des événements</div>
 
       {/* Desktop/Tablet controls */}
@@ -101,7 +101,7 @@ export default function Navbar({ togglePanel }) {
 
       {/* Mobile dropdown menu */}
       {isMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-gray-800 border-t border-gray-700 z-[1000]">
+        <div className="md:hidden absolute top-full left-0 right-0 bg-gray-800 border-t border-gray-700 z-[3000]">
           <div className="px-4 py-3 flex flex-col gap-3">
             {token && role === "admin" && (
               <button
