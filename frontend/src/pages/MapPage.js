@@ -103,11 +103,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres */}
-        <div className="p-2 bg-gray-100">
-          <details className="md:open">
-            <summary className="md:hidden cursor-pointer select-none">Filtres</summary>
-            <div className="mt-2 flex flex-col md:flex-row gap-2">
+        {/* Filtres - Mobile (collapsible) */}
+        <div className="p-2 bg-gray-100 md:hidden">
+          <details>
+            <summary className="cursor-pointer select-none">Filtres</summary>
+            <div className="mt-2 flex flex-col gap-2">
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
@@ -136,6 +136,36 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               </button>
             </div>
           </details>
+        </div>
+
+        {/* Filtres - Desktop/Tablet (always visible) */}
+        <div className="hidden md:flex p-2 gap-2 bg-gray-100">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="border rounded p-2"
+          >
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          <select
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="border rounded p-2"
+          >
+            {uniqueDates.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+
+          <button
+            onClick={goToCurrentPosition}
+            className="bg-blue-500 text-white px-3 py-2 rounded"
+          >
+            Ma position
+          </button>
         </div>
 
         {/* Carte */}
