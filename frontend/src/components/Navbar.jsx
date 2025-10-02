@@ -23,7 +23,7 @@ export default function Navbar({ togglePanel }) {
   };
 
   return (
-    <nav className="bg-gray-800 text-white relative flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
+    <nav className="bg-gray-800 text-white relative z-[1000] flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
       <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Carte des événements</div>
 
       {/* Desktop/Tablet controls */}
@@ -83,18 +83,25 @@ export default function Navbar({ togglePanel }) {
 
       {/* Mobile hamburger */}
       <button
-        className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded hover:bg-gray-700"
+        className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-white/50"
         aria-label="Menu"
+        aria-expanded={isMenuOpen}
         onClick={() => setIsMenuOpen((v) => !v)}
       >
-        <span className="block w-5 h-0.5 bg-white mb-1"></span>
-        <span className="block w-5 h-0.5 bg-white mb-1"></span>
-        <span className="block w-5 h-0.5 bg-white"></span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          className="w-6 h-6"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
       </button>
 
       {/* Mobile dropdown menu */}
       {isMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 right-0 bg-gray-800 border-t border-gray-700 z-50">
+        <div className="md:hidden absolute top-full left-0 right-0 bg-gray-800 border-t border-gray-700 z-[1000]">
           <div className="px-4 py-3 flex flex-col gap-3">
             {token && role === "admin" && (
               <button
