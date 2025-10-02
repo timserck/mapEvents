@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <title>Events OSM</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    // Set --vh to handle mobile browser UI chrome
+    (function() {
+      function setVh() {
+        var vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', vh + 'px');
+      }
+      setVh();
+      window.addEventListener('resize', setVh);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

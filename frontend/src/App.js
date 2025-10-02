@@ -18,7 +18,7 @@ function MainApp() {
   const togglePanel = () => setIsPanelOpen((prev) => !prev);
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col min-h-screen-mobile">
       {/* Navbar handles the toggle */}
       <Navbar togglePanel={togglePanel} />
       {/* MapPage receives only role, token, and panel state */}
