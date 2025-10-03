@@ -74,7 +74,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // Fonction pour récupérer une image Wikimedia par titre de lieu
+  // Récupérer image Wikimedia si possible
   const fetchWikimediaImage = async (placeName) => {
     try {
       const res = await fetch(
@@ -91,18 +91,18 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return null;
   };
 
-  // Charger les images après récupération des événements
-  useEffect(() => {
-    const loadImages = async () => {
-      const images = {};
-      for (const e of events) {
-        const img = await fetchWikimediaImage(e.title);
-        if (img) images[e.id] = img;
-      }
-      setEventImages(images);
-    };
-    if (events.length) loadImages();
-  }, [events]);
+  // Récupérer image Unsplash fallback sans clé API
+  const fetchUnsplashImage = async (placeName) => {
+    try {
+      const res = await fetch(
+        `https://source.unsplash.com/400x300/?${encodeURIComponent(placeName)}`
+      );
+      return res.url; // Unsplash renvoie directement l'image
+    } catch (err) {
+      console.error("Erreur Unsplash image:", err);
+      return null;
+    }
+  };
 
   useEffect(() => {
     fetchEvents();
@@ -116,10 +116,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           setUserPosition([latitude, longitude]);
           if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
         },
-        async (err) => {
-          console.error("Erreur géolocalisation, fallback API:", err);
-          await fallbackGeoAPI();
-        },
+        async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
       );
     } else {
@@ -152,116 +149,70 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const formatDate = (d) =>
     new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  // Charger l'image dynamiquement à l'ouverture du popup
+  const loadImage = async (id, title) => {
+    if (!eventImages[id]) {
+      let img = await fetchWikimediaImage(title);
+      if (!img) img = await fetchUnsplashImage(title);
+      setEventImages((prev) => ({ ...prev, [id]: img }));
+    }
+  };
+
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres */}
+        {/* Filtres mobile */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="border rounded p-2"
-              >
-                {uniqueTypes.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-
-              <select
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-                className="border rounded p-2"
-              >
-                {uniqueDates.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
+              <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
-
-              <button
-                onClick={goToCurrentPosition}
-                className="bg-blue-500 text-white px-3 py-2 rounded"
-              >
-                Ma position
-              </button>
+              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
             </div>
           </details>
         </div>
 
+        {/* Filtres desktop */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="border rounded p-2"
-          >
-            {uniqueTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-
-          <select
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="border rounded p-2"
-          >
-            {uniqueDates.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
-
-          <button
-            onClick={goToCurrentPosition}
-            className="bg-blue-500 text-white px-3 py-2 rounded"
-          >
-            Ma position
-          </button>
+          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
         </div>
 
         {/* Carte */}
-        <MapContainer
-          ref={mapRef}
-          center={[48.8566, 2.3522]}
-          zoom={12}
-          style={{ height: "100%", width: "100%" }}
-          whenCreated={(map) => (mapRef.current = map)}
-        >
-          <TileLayer
-            attribution="&copy; OpenStreetMap"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-
+        <MapContainer ref={mapRef} center={[48.8566, 2.3522]} zoom={12} style={{ height: "100%", width: "100%" }}>
+          <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
-              <Marker
-                key={e.id}
-                position={[e.latitude, e.longitude]}
-                icon={createNumberedIcon(index + 1)}
-              >
-                <Popup>
+              <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1)}>
+                <Popup
+                  eventHandlers={{
+                    add: () => loadImage(e.id, e.title),
+                  }}
+                >
                   <strong>{index + 1}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div dangerouslySetInnerHTML={{ __html: e.description }} />
-
-                  {/* Image dynamique Wikimedia */}
                   {eventImages[e.id] && (
-                    <div className="my-2">
+                    <div className="my-2 w-full h-40 overflow-hidden rounded">
                       <img
                         src={eventImages[e.id]}
                         alt={e.title}
-                        style={{ maxWidth: "200px", maxHeight: "150px", objectFit: "cover" }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       />
                     </div>
                   )}
-
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-500 underline"
-                  >
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline">
                     🚗 Itinéraire Google Maps
                   </a>
                 </Popup>
@@ -280,6 +231,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         </MapContainer>
       </div>
 
+      {/* Panel Admin */}
       {isAdmin && isPanelOpen && (
         <div className="fixed inset-0 md:static z-[3000] md:z-auto">
           <div className="absolute inset-0 bg-black/40 md:hidden" onClick={onCloseAdminPanel} />
