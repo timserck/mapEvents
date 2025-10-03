@@ -49,6 +49,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
+  const [userAddress, setUserAddress] = useState(null);
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
@@ -85,29 +86,28 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
         },
         async (err) => {
-          console.error("Erreur géolocalisation, fallback GeoJS:", err);
-          await fallbackGeoJS();
+          console.error("Erreur géolocalisation, fallback API:", err);
+          await fallbackGeoAPI();
         },
         { enableHighAccuracy: true }
       );
     } else {
-      await fallbackGeoJS();
+      await fallbackGeoAPI();
     }
   };
-  
-  const fallbackGeoJS = async () => {
+
+  const fallbackGeoAPI = async () => {
     try {
-      const res = await fetch("https://get.geojs.io/v1/ip/geo.json");
+      const res = await fetch("https://timserck.duckdns.org/geoapi/");
       const data = await res.json();
-      const { latitude, longitude } = data;
+      const { latitude, longitude, address } = data;
       setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
-      if (mapRef.current) mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 10);
+      setUserAddress(address);
+      if (mapRef.current) mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 14);
     } catch (e) {
-      console.error("Impossible d'obtenir la position via GeoJS:", e);
+      console.error("Impossible d'obtenir la position via l'API DuckDNS:", e);
     }
   };
-  
-  
 
   const filteredEvents = events.filter(
     (e) =>
@@ -229,7 +229,10 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           {userPosition && (
             <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici</Popup>
+              <Popup>
+                📍 Vous êtes ici
+                {userAddress && <div>{userAddress}</div>}
+              </Popup>
             </Marker>
           )}
         </MapContainer>
