@@ -13,6 +13,8 @@ export default function AdminPanel({ refreshEvents }) {
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [bulkInput, setBulkInput] = useState(`[
     {
@@ -47,6 +49,26 @@ export default function AdminPanel({ refreshEvents }) {
   // Form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    let finalLat = latitude;
+    let finalLon = longitude;
+
+    // Si coords manquantes ou adresse modifiée → géocodage automatique
+    if ((!finalLat || !finalLon) || (editingEvent && editingEvent.address !== address)) {
+      try {
+        const res = await fetch(
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`
+        );
+        const data = await res.json();
+        if (data.features && data.features.length > 0) {
+          finalLat = data.features[0].geometry.coordinates[1];
+          finalLon = data.features[0].geometry.coordinates[0];
+        }
+      } catch (err) {
+        console.error("Erreur géocodage automatique:", err);
+      }
+    }
+
     const url = editingEvent
       ? `${API_URL}/events/${editingEvent.id}`
       : `${API_URL}/events`;
@@ -58,7 +80,15 @@ export default function AdminPanel({ refreshEvents }) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ title, type, date, description, address }),
+      body: JSON.stringify({
+        title,
+        type,
+        date,
+        description,
+        address,
+        latitude: finalLat,
+        longitude: finalLon,
+      }),
     });
 
     resetForm();
@@ -73,6 +103,8 @@ export default function AdminPanel({ refreshEvents }) {
     setDate(event.date);
     setDescription(event.description);
     setAddress(event.address);
+    setLatitude(event.latitude);
+    setLongitude(event.longitude);
   };
 
   const resetForm = () => {
@@ -82,6 +114,8 @@ export default function AdminPanel({ refreshEvents }) {
     setDate("");
     setDescription("");
     setAddress("");
+    setLatitude(null);
+    setLongitude(null);
   };
 
   // Delete single event
@@ -134,14 +168,16 @@ export default function AdminPanel({ refreshEvents }) {
 
     if (value.length > 3) {
       try {
-        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=5`);
+        const res = await fetch(
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(value)}&limit=5`
+        );
         const data = await res.json();
-        const formattedSuggestions = data.features.map(f => ({
+        const formattedSuggestions = data.features.map((f) => ({
           display_name: f.properties.name
             ? f.properties.name + (f.properties.city ? `, ${f.properties.city}` : "")
             : f.properties.street || "",
           lat: f.geometry.coordinates[1],
-          lon: f.geometry.coordinates[0]
+          lon: f.geometry.coordinates[0],
         }));
         setSuggestions(formattedSuggestions);
       } catch (err) {
@@ -155,6 +191,8 @@ export default function AdminPanel({ refreshEvents }) {
 
   const handleSelectSuggestion = (sugg) => {
     setAddress(sugg.display_name);
+    setLatitude(sugg.lat);
+    setLongitude(sugg.lon);
     setSuggestions([]);
   };
 
