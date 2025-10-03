@@ -83,7 +83,8 @@ export default function AdminPanel({ refreshEvents }) {
       body: JSON.stringify({
         title,
         type,
-        date,
+        // 🔥 Conversion en ISO avant envoi si ton backend en a besoin
+        date: new Date(date).toISOString(),
         description,
         address,
         latitude: finalLat,
@@ -100,7 +101,11 @@ export default function AdminPanel({ refreshEvents }) {
     setEditingEvent(event);
     setTitle(event.title);
     setType(event.type);
-    setDate(event.date);
+
+    // ✅ On extrait uniquement "YYYY-MM-DD" pour l’input
+    const onlyDate = event.date ? event.date.split("T")[0] : "";
+    setDate(onlyDate);
+
     setDescription(event.description);
     setAddress(event.address);
     setLatitude(event.latitude);
