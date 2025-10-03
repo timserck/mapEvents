@@ -197,7 +197,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
         {/* Filtres */}
-        <div className="hidden md:flex p-2 gap-2 bg-gray-100">
+        <div className="flex p-2 gap-2 bg-gray-100">
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
             {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
