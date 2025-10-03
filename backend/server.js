@@ -99,12 +99,30 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+// POST /events - Créer un événement
 app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
   let { title, type, date, latitude, longitude, description, address, position } = req.body;
 
   try {
+    // Validation des champs obligatoires
+    if (!title || !type || !date || !address) {
+      return res.status(400).json({ error: "title, type, date et address sont requis" });
+    }
+
+    // Formater la date pour PostgreSQL (YYYY-MM-DD)
+    if (date.includes("T")) date = date.split("T")[0];
+
+    // Géocodage automatique si lat/lon manquants
+    if (!latitude || !longitude) {
+      const geo = await geocodeAddress(address);
+      if (!geo) return res.status(400).json({ error: "Impossible de géocoder l'adresse" });
+      latitude = geo.latitude;
+      longitude = geo.longitude;
+    }
+
+    // Calcul de la position
     if (!position) {
-      const posRes = await pool.query("SELECT COALESCE(MAX(position), 0) + 1 AS next", []);
+      const posRes = await pool.query("SELECT COALESCE(MAX(position),0)+1 AS next FROM events");
       position = posRes.rows[0].next;
     }
 
@@ -116,6 +134,7 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
                  ST_X(location::geometry) AS longitude`,
       [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, position]
     );
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Insert event error:", err);
@@ -123,21 +142,28 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-
-// Update event
+// PUT /events/:id - Mettre à jour un événement
 app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { id } = req.params;
   let { title, type, date, description, address, latitude, longitude } = req.body;
 
-  if (address && (!latitude || !longitude)) {
-    const geo = await geocodeAddress(address);
-    if (geo) {
+  try {
+    // Validation
+    if (!title || !type || !date || !address) {
+      return res.status(400).json({ error: "title, type, date et address sont requis" });
+    }
+
+    // Formater la date
+    if (date.includes("T")) date = date.split("T")[0];
+
+    // Géocodage si lat/lon manquants ou adresse modifiée
+    if (!latitude || !longitude) {
+      const geo = await geocodeAddress(address);
+      if (!geo) return res.status(400).json({ error: "Impossible de géocoder l'adresse" });
       latitude = geo.latitude;
       longitude = geo.longitude;
     }
-  }
 
-  try {
     const result = await pool.query(
       `UPDATE events
        SET title=$1, type=$2, date=$3, description=$4, address=$5,
@@ -148,12 +174,16 @@ app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
                  ST_X(location::geometry) AS longitude`,
       [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, id]
     );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: "Événement non trouvé" });
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Update event error:", err);
     res.status(500).json({ error: "DB update error" });
   }
 });
+
 
 // Delete event
 app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
