@@ -84,28 +84,29 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           setUserPosition([latitude, longitude]);
           if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
         },
-        (err) => {
-          console.error("Erreur géolocalisation:", err);
-          fallbackIpLocation();
+        async (err) => {
+          console.error("Erreur géolocalisation, fallback GeoJS:", err);
+          await fallbackGeoJS();
         },
         { enableHighAccuracy: true }
       );
     } else {
-      fallbackIpLocation();
+      await fallbackGeoJS();
     }
   };
   
-  const fallbackIpLocation = async () => {
+  const fallbackGeoJS = async () => {
     try {
-      const res = await fetch("https://ipapi.co/json/"); // or another IP geolocation API
+      const res = await fetch("https://get.geojs.io/v1/ip/geo.json");
       const data = await res.json();
       const { latitude, longitude } = data;
-      setUserPosition([latitude, longitude]);
-      if (mapRef.current) mapRef.current.setView([latitude, longitude], 10);
+      setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
+      if (mapRef.current) mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 10);
     } catch (e) {
-      console.error("Impossible d'obtenir la position via IP:", e);
+      console.error("Impossible d'obtenir la position via GeoJS:", e);
     }
   };
+  
   
 
   const filteredEvents = events.filter(
