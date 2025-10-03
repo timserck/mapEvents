@@ -7,10 +7,9 @@ import AdminPanel from "../components/AdminPanel";
 import LazyImage from "../components/LazyImage";
 import { API_URL } from "../config";
 
-// Cache en mémoire
-const imageCache = {};
-
-// Marqueur numéroté
+// --------------------
+// Icônes
+// --------------------
 const createNumberedIcon = (number) =>
   L.divIcon({
     html: `<div style="
@@ -33,7 +32,6 @@ const createNumberedIcon = (number) =>
     popupAnchor: [0, -14],
   });
 
-// Icône position utilisateur
 const myPositionIcon = L.divIcon({
   html: `<div style="
     background:red;
@@ -48,29 +46,41 @@ const myPositionIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
-// Utils pour images
-const buildSearchQuery = (title, type, city) => `${title} ${type} ${city}`;
-const extractCityFromAddress = (address) => {
-  if (!address) return "";
-  const parts = address.split(",");
-  if (parts.length >= 2) return parts[parts.length - 2].trim();
-  return "";
-};
+// --------------------
+// Throttle & batch helpers
+// --------------------
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// --------------------
+// Récupération d’images
+// --------------------
 const fetchWikimediaImage = async (search) => {
   try {
-    const res = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+    const searchRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
         search
-      )}&prop=pageimages&format=json&origin=*`
+      )}&format=json&origin=*`
     );
-    const data = await res.json();
-    const pages = Object.values(data.query.pages);
+    const searchData = await searchRes.json();
+    if (!searchData.query.search.length) return null;
+
+    const pageTitle = searchData.query.search[0].title;
+    const pageRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+        pageTitle
+      )}&prop=pageimages&format=json&pithumbsize=400&origin=*`
+    );
+    const pageData = await pageRes.json();
+    const pages = Object.values(pageData.query.pages);
     if (pages[0] && pages[0].thumbnail) return pages[0].thumbnail.source;
-  } catch (err) { console.error("Erreur Wikimedia image:", err); }
+  } catch (err) {
+    console.error("Erreur Wikimedia image:", err);
+  }
   return null;
 };
+
 const fetchWikidataImageAdvanced = async (title, type, city) => {
-  const search = buildSearchQuery(title, type, city).toLowerCase();
+  const search = `${title} ${type} ${city}`.toLowerCase();
   const query = `
     SELECT ?image WHERE {
       ?place rdfs:label ?label.
@@ -80,14 +90,19 @@ const fetchWikidataImageAdvanced = async (title, type, city) => {
   `;
   const url = `https://query.wikidata.org/sparql?query=${encodeURIComponent(query)}&format=json`;
   try {
+    await delay(500); // 🔹 éviter 429
     const res = await fetch(url);
+    if (!res.ok) return null;
     const data = await res.json();
     if (data.results.bindings.length > 0) return data.results.bindings[0].image.value;
-  } catch (err) { console.error("Erreur Wikidata image avancée:", err); }
+  } catch (err) {
+    console.error("Erreur Wikidata image avancée:", err);
+  }
   return null;
 };
+
 const fetchOSMImage = async (search) => {
-  const bbox = "36.7,-4.5,36.73,-4.41"; // Málaga exemple
+  const bbox = "36.7,-4.5,36.73,-4.41"; // exemple Málaga
   const query = `[out:json]; node["name"="${search}"](${bbox}); out tags;`;
   try {
     const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
@@ -98,34 +113,52 @@ const fetchOSMImage = async (search) => {
   } catch (err) { console.error("Erreur OSM image:", err); }
   return null;
 };
+
 const unsplashFallbackByType = (type) => `https://source.unsplash.com/400x300/?${encodeURIComponent(type)}`;
-const batchPromises = async (items, batchSize, asyncFn) => {
-  const results = [];
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(asyncFn));
-    results.push(...batchResults);
-  }
-  return results;
+
+const extractCityFromAddress = (address) => {
+  if (!address) return "";
+  const parts = address.split(",");
+  return parts.length >= 2 ? parts[parts.length - 2].trim() : "";
 };
 
+const preloadEventImages = async (events, setEventImages, eventImages) => {
+  const imageCache = { ...eventImages };
+  for (const e of events) {
+    if (imageCache[e.id]) continue;
+    const city = extractCityFromAddress(e.address);
+    const search = `${e.title} ${e.type} ${city}`;
+    const img =
+      (await fetchWikimediaImage(search)) ||
+      (await fetchWikidataImageAdvanced(e.title, e.type, city)) ||
+      (await fetchOSMImage(search)) ||
+      unsplashFallbackByType(e.type);
+    imageCache[e.id] = img;
+  }
+  setEventImages(imageCache);
+  try { localStorage.setItem("eventImages", JSON.stringify(imageCache)); } catch {}
+};
+
+// --------------------
+// Composant MapPage
+// --------------------
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
   const [eventImages, setEventImages] = useState(() => {
     try {
       const stored = localStorage.getItem("eventImages");
       return stored ? JSON.parse(stored) : {};
-    } catch (e) { return {}; }
+    } catch { return {}; }
   });
   const [openPopups, setOpenPopups] = useState({});
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
-  const [mapBounds, setMapBounds] = useState(null);
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
+  // Récupérer événements
   const fetchEvents = async () => {
     try {
       const res = await fetch(`${API_URL}/events`);
@@ -136,44 +169,24 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   useEffect(() => { fetchEvents(); }, []);
 
-  // Préchargement images avec cache mémoire + localStorage
+  // Préchargement images
   useEffect(() => {
-    const preloadImages = async () => {
-      const results = await batchPromises(events, 5, async (e) => {
-        if (imageCache[e.id]) return { id: e.id, img: imageCache[e.id] };
-
-        const city = extractCityFromAddress(e.address);
-        let img = await fetchWikimediaImage(buildSearchQuery(e.title, e.type, city));
-        if (!img) img = await fetchWikidataImageAdvanced(e.title, e.type, city);
-        if (!img) img = await fetchOSMImage(buildSearchQuery(e.title, e.type, city));
-        if (!img) img = unsplashFallbackByType(e.type);
-
-        imageCache[e.id] = img;
-        return { id: e.id, img };
-      });
-
-      const imagesMap = { ...eventImages };
-      results.forEach(({ id, img }) => { imagesMap[id] = img; });
-      setEventImages(imagesMap);
-
-      try {
-        localStorage.setItem("eventImages", JSON.stringify(imagesMap));
-      } catch (e) {
-        console.error("Impossible de sauvegarder les images dans localStorage", e);
-      }
-    };
-    if (events.length > 0) preloadImages();
+    if (events.length > 0) preloadEventImages(events, setEventImages, eventImages);
   }, [events]);
 
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-    const updateView = () => setMapBounds(map.getBounds());
-    map.on("moveend zoomend", updateView);
-    updateView();
-    return () => { map.off("moveend zoomend", updateView); };
-  }, [mapRef]);
+  // Filtres
+  const filteredEvents = events.filter(
+    (e) => (filterType === "all" || e.type === filterType) &&
+           (filterDate === "all" || e.date === filterDate)
+  );
 
+  const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
+  const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
+
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  // Position utilisateur
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -182,81 +195,66 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           setUserPosition([latitude, longitude]);
           if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
         },
-        async () => await fallbackGeoAPI(),
+        async () => console.error("Impossible de géolocaliser"),
         { enableHighAccuracy: true }
       );
-    } else { await fallbackGeoAPI(); }
+    }
   };
-
-  const fallbackGeoAPI = async () => {
-    try {
-      const res = await fetch("https://timserck.duckdns.org/geoapi/");
-      const data = await res.json();
-      const { latitude, longitude, address } = data;
-      setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
-      setUserAddress(address);
-      if (mapRef.current) mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 14);
-    } catch (e) { console.error("Impossible d'obtenir la position via l'API DuckDNS:", e); }
-  };
-
-  const filteredEvents = events.filter(
-    (e) => (filterType === "all" || e.type === filterType) &&
-           (filterDate === "all" || e.date === filterDate)
-  );
-
-  const visibleEvents = filteredEvents.filter((e) => {
-    if (!mapBounds) return true;
-    return mapBounds.contains([e.latitude, e.longitude]);
-  });
-
-  const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
-  const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
-
-  const formatDate = (d) =>
-    new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return (
     <div className="flex h-screen">
-      <MapContainer ref={mapRef} center={[36.72, -4.42]} zoom={12} style={{ height: "100%", width: "100%" }}>
-        <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <MarkerClusterGroup>
-          {visibleEvents.map((e, index) => (
-            <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1)}>
-              <Popup
-                eventHandlers={{
-                  add: () => setOpenPopups((prev) => ({ ...prev, [e.id]: true })),
-                  remove: () => setOpenPopups((prev) => ({ ...prev, [e.id]: false })),
-                }}
-              >
-                <strong>{index + 1}. {e.title}</strong>
-                <p>{e.type} - {formatDate(e.date)}</p>
-                <p>{e.address}</p>
-                <div dangerouslySetInnerHTML={{ __html: e.description }} />
-                {openPopups[e.id] && eventImages[e.id] && (
-                  <LazyImage src={eventImages[e.id]} alt={e.title} className="w-full h-40 my-2" />
-                )}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-500 underline"
+      <div className="flex-1 flex flex-col">
+        <div className="p-2 bg-gray-100 md:flex md:gap-2">
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
+        </div>
+
+        <MapContainer ref={mapRef} center={[36.72, -4.42]} zoom={12} style={{ height: "100%", width: "100%" }}>
+          <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <MarkerClusterGroup>
+            {filteredEvents.map((e, index) => (
+              <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1)}>
+                <Popup
+                  eventHandlers={{
+                    add: () => setOpenPopups((prev) => ({ ...prev, [e.id]: true })),
+                    remove: () => setOpenPopups((prev) => ({ ...prev, [e.id]: false })),
+                  }}
                 >
-                  🚗 Itinéraire Google Maps
-                </a>
+                  <strong>{index + 1}. {e.title}</strong>
+                  <p>{e.type} - {formatDate(e.date)}</p>
+                  <p>{e.address}</p>
+                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
+                  {openPopups[e.id] && eventImages[e.id] && (
+                    <LazyImage src={eventImages[e.id]} alt={e.title} className="w-full h-40 my-2" />
+                  )}
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-500 underline"
+                  >
+                    🚗 Itinéraire Google Maps
+                  </a>
+                </Popup>
+              </Marker>
+            ))}
+          </MarkerClusterGroup>
+
+          {userPosition && (
+            <Marker position={userPosition} icon={myPositionIcon}>
+              <Popup>
+                📍 Vous êtes ici
+                {userAddress && <div>{userAddress}</div>}
               </Popup>
             </Marker>
-          ))}
-        </MarkerClusterGroup>
-
-        {userPosition && (
-          <Marker position={userPosition} icon={myPositionIcon}>
-            <Popup>
-              📍 Vous êtes ici
-              {userAddress && <div>{userAddress}</div>}
-            </Popup>
-          </Marker>
-        )}
-      </MapContainer>
+          )}
+        </MapContainer>
+      </div>
 
       {isAdmin && isPanelOpen && (
         <div className="fixed inset-0 md:static z-[3000] md:z-auto">
