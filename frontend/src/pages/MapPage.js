@@ -76,17 +76,37 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     fetchEvents();
   }, []);
 
-  const goToCurrentPosition = () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setUserPosition([latitude, longitude]);
-        if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
-      },
-      (err) => console.error("Erreur géolocalisation:", err),
-      { enableHighAccuracy: true }
-    );
+  const goToCurrentPosition = async () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          setUserPosition([latitude, longitude]);
+          if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
+        },
+        (err) => {
+          console.error("Erreur géolocalisation:", err);
+          fallbackIpLocation();
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      fallbackIpLocation();
+    }
   };
+  
+  const fallbackIpLocation = async () => {
+    try {
+      const res = await fetch("https://ipapi.co/json/"); // or another IP geolocation API
+      const data = await res.json();
+      const { latitude, longitude } = data;
+      setUserPosition([latitude, longitude]);
+      if (mapRef.current) mapRef.current.setView([latitude, longitude], 10);
+    } catch (e) {
+      console.error("Impossible d'obtenir la position via IP:", e);
+    }
+  };
+  
 
   const filteredEvents = events.filter(
     (e) =>
