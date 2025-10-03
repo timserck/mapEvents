@@ -10,7 +10,6 @@ import LazyImage from "../components/LazyImage";
 const DEFAULT_IMAGE = "https://via.placeholder.com/400x300?text=Image+indisponible";
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
-// Cache localStorage avec expiration
 const setCache = (key, value, ttlMs) => {
   const record = { value, expiry: Date.now() + ttlMs };
   localStorage.setItem(key, JSON.stringify(record));
@@ -31,7 +30,7 @@ const getCache = (key) => {
   }
 };
 
-// Icône numérotée
+// Icône numérotée pour markers
 const createNumberedIcon = (number) =>
   L.divIcon({
     html: `<div style="
@@ -100,50 +99,43 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // Fetch images avec cache
+  // Fetch images avec fallback
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
       const cacheKey = `event_image_${ev.id}`;
-      let imageUrl = getCache(cacheKey);
+      let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
 
-      if (!imageUrl) {
-        imageUrl = DEFAULT_IMAGE;
-
-        // Unsplash
+      // Unsplash
+      if (imageUrl === DEFAULT_IMAGE) {
         try {
           const query = encodeURIComponent(ev.title);
           const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
           if (res.ok && res.url) imageUrl = res.url;
-        } catch (e) {
-          console.warn("Unsplash fail:", e);
-        }
-
-        // Wikidata fallback
-        if (imageUrl === DEFAULT_IMAGE) {
-          try {
-            const sparqlQuery = `
-              SELECT ?image WHERE {
-                ?place rdfs:label ?label.
-                FILTER(CONTAINS(LCASE(?label), "${ev.title.toLowerCase()}")).
-                ?place wdt:P18 ?image.
-              } LIMIT 1
-            `;
-            const url = "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(sparqlQuery);
-            const wdRes = await fetch(url, { headers: { Accept: "application/sparql-results+json" } });
-            if (wdRes.ok) {
-              const json = await wdRes.json();
-              const bindings = json?.results?.bindings || [];
-              if (bindings.length > 0 && bindings[0].image?.value) imageUrl = bindings[0].image.value;
-            }
-          } catch (err) {
-            console.warn("Wikidata fail:", err);
-          }
-        }
-
-        setCache(cacheKey, imageUrl, CACHE_TTL);
+        } catch {}
       }
 
+      // Wikidata fallback
+      if (imageUrl === DEFAULT_IMAGE) {
+        try {
+          const sparqlQuery = `
+            SELECT ?image WHERE {
+              ?place rdfs:label ?label.
+              FILTER(CONTAINS(LCASE(?label), "${ev.title.toLowerCase()}")).
+              ?place wdt:P18 ?image.
+            } LIMIT 1
+          `;
+          const url = "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(sparqlQuery);
+          const wdRes = await fetch(url, { headers: { Accept: "application/sparql-results+json" } });
+          if (wdRes.ok) {
+            const json = await wdRes.json();
+            const bindings = json?.results?.bindings || [];
+            if (bindings.length > 0 && bindings[0].image?.value) imageUrl = bindings[0].image.value;
+          }
+        } catch {}
+      }
+
+      setCache(cacheKey, imageUrl, CACHE_TTL);
       updatedImages[ev.id] = imageUrl;
     }
     setEventImages((prev) => ({ ...prev, ...updatedImages }));
@@ -152,7 +144,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => fetchEvents(), []);
   useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
 
-  // Géolocalisation utilisateur
+  // Géolocalisation
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -196,8 +188,26 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres */}
-        <div className="flex p-2 gap-2 bg-gray-100">
+        {/* Mobile filters */}
+        <div className="p-2 bg-gray-100 md:hidden">
+          <details>
+            <summary className="cursor-pointer select-none">Filtres</summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
+                Ma position
+              </button>
+            </div>
+          </details>
+        </div>
+
+        {/* Desktop / Tablet filters */}
+        <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
             {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -209,7 +219,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </button>
         </div>
 
-        {/* Carte */}
+        {/* Map */}
         <MapContainer ref={mapRef} center={[48.8566, 2.3522]} zoom={12} style={{ height: "100%", width: "100%" }}>
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MarkerClusterGroup>
