@@ -46,6 +46,7 @@ const myPositionIcon = L.divIcon({
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
+  const [eventImages, setEventImages] = useState({});
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
@@ -72,6 +73,36 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       console.error("Fetch events error:", err);
     }
   };
+
+  // Fonction pour récupérer une image Wikimedia par titre de lieu
+  const fetchWikimediaImage = async (placeName) => {
+    try {
+      const res = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+          placeName
+        )}&prop=pageimages&format=json&origin=*`
+      );
+      const data = await res.json();
+      const pages = Object.values(data.query.pages);
+      if (pages[0] && pages[0].thumbnail) return pages[0].thumbnail.source;
+    } catch (err) {
+      console.error("Erreur Wikimedia image:", err);
+    }
+    return null;
+  };
+
+  // Charger les images après récupération des événements
+  useEffect(() => {
+    const loadImages = async () => {
+      const images = {};
+      for (const e of events) {
+        const img = await fetchWikimediaImage(e.title);
+        if (img) images[e.id] = img;
+      }
+      setEventImages(images);
+    };
+    if (events.length) loadImages();
+  }, [events]);
 
   useEffect(() => {
     fetchEvents();
@@ -124,7 +155,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres - Mobile (collapsible) */}
+        {/* Filtres */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
@@ -159,7 +190,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </details>
         </div>
 
-        {/* Filtres - Desktop/Tablet (always visible) */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -214,6 +244,18 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div dangerouslySetInnerHTML={{ __html: e.description }} />
+
+                  {/* Image dynamique Wikimedia */}
+                  {eventImages[e.id] && (
+                    <div className="my-2">
+                      <img
+                        src={eventImages[e.id]}
+                        alt={e.title}
+                        style={{ maxWidth: "200px", maxHeight: "150px", objectFit: "cover" }}
+                      />
+                    </div>
+                  )}
+
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
                     target="_blank"
