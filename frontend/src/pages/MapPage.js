@@ -91,19 +91,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return null;
   };
 
-  // Récupérer image Unsplash fallback sans clé API
-  const fetchUnsplashImage = async (placeName) => {
-    try {
-      const res = await fetch(
-        `https://source.unsplash.com/400x300/?${encodeURIComponent(placeName)}`
-      );
-      return res.url; // Unsplash renvoie directement l'image
-    } catch (err) {
-      console.error("Erreur Unsplash image:", err);
-      return null;
-    }
-  };
-
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -153,7 +140,10 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const loadImage = async (id, title) => {
     if (!eventImages[id]) {
       let img = await fetchWikimediaImage(title);
-      if (!img) img = await fetchUnsplashImage(title);
+      if (!img) {
+        // Fallback direct URL Unsplash (pas de fetch)
+        img = `https://source.unsplash.com/400x300/?${encodeURIComponent(title)}`;
+      }
       setEventImages((prev) => ({ ...prev, [id]: img }));
     }
   };
