@@ -16,10 +16,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
+  const [userHasMovedMap, setUserHasMovedMap] = useState(false);
+
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // ---- Fonction Wikidata avec retry ----
+  // ---- Wikidata image fetch with retry ----
   const getWikidataImage = async (title, retries = 3, delay = 2000) => {
     const sparqlQuery = `
       SELECT ?image WHERE {
@@ -39,7 +41,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
       if (wdRes.status === 429 && retries > 0) {
         console.warn(
-          `⚠️ Wikidata rate limit atteint, retry dans ${delay / 1000}s...`
+          `⚠️ Wikidata rate limit reached, retry in ${delay / 1000}s...`
         );
         await new Promise((res) => setTimeout(res, delay));
         return getWikidataImage(title, retries - 1, delay * 2);
@@ -53,7 +55,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         }
       }
     } catch (e) {
-      console.error("Erreur Wikidata:", e);
+      console.error("Wikidata error:", e);
     }
 
     return null;
@@ -63,10 +65,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (mapRef.current)
+      if (mapRef.current && !userHasMovedMap) {
         mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
+      }
       return;
     }
+
     try {
       const res = await fetch(`${API_URL}/events`);
       const contentType = res.headers.get("content-type") || "";
@@ -76,19 +80,23 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       }
       const data = await res.json();
       setEvents(data);
+
+      if (!userHasMovedMap && data.length > 0 && mapRef.current) {
+        mapRef.current.setView([data[0].latitude, data[0].longitude], 14);
+      }
     } catch (err) {
       console.error("Fetch events error:", err);
     }
   };
 
-  // ---- Fetch images avec fallback ----
+  // ---- Fetch images for events ----
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
       const cacheKey = `event_image_${ev.id}`;
       let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
 
-      // Unsplash
+      // Unsplash fallback
       if (imageUrl === DEFAULT_IMAGE) {
         try {
           const query = encodeURIComponent(ev.title);
@@ -111,12 +119,17 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
-  useEffect(() => fetchEvents(), []);
+  // ---- useEffect: fetch events on mount ----
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  // ---- useEffect: fetch images when events change ----
   useEffect(() => {
     if (events.length > 0) fetchImagesForEvents(events);
   }, [events]);
 
-  // ---- Géolocalisation ----
+  // ---- Geolocation ----
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -124,6 +137,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           const { latitude, longitude } = pos.coords;
           setUserPosition([latitude, longitude]);
           if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
+          setUserHasMovedMap(true);
         },
         async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
@@ -142,12 +156,22 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setUserAddress(address);
       if (mapRef.current)
         mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 14);
+      setUserHasMovedMap(true);
     } catch (e) {
       console.error("Fallback geo fail:", e);
     }
   };
 
-  // ---- Filtres ----
+  // ---- Track map movements to detect user navigation ----
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const onMove = () => setUserHasMovedMap(true);
+    map.on("movestart", onMove);
+    return () => map.off("movestart", onMove);
+  }, [mapRef.current]);
+
+  // ---- Filters ----
   const filteredEvents = events.filter(
     (e) =>
       (filterType === "all" || e.type === filterType) &&
@@ -157,11 +181,16 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
-  // ---- Render ----
+  // ---- Map initial center ----
+  const initialCenter =
+    events.length > 0
+      ? [events[0].latitude, events[0].longitude]
+      : [48.8566, 2.3522]; // fallback Paris
+
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Mobile filters */}
+        {/* Filters */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
@@ -198,7 +227,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </details>
         </div>
 
-        {/* Desktop / Tablet filters */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -233,7 +261,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         {/* Map */}
         <MapContainer
           ref={mapRef}
-          center={[48.8566, 2.3522]}
+          center={initialCenter}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
         >
@@ -288,8 +316,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           {userPosition && (
             <Marker position={userPosition} icon={myPositionIcon}>
               <Popup>
-                📍 Vous êtes ici{" "}
-                {userAddress && <div>{userAddress}</div>}
+                📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}
               </Popup>
             </Marker>
           )}
