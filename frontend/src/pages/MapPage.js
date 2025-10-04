@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
-import "../leafletI.js";
+import  "../leafletFix.js";
+import { createNumberedIcon, myPositionIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel";
 import { API_URL } from "../config";
 import LazyImage from "../components/LazyImage";
