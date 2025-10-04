@@ -1,72 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
-import L from "leaflet";
-import "../leafletIconFix";
+import "../leafletI.js";
 import AdminPanel from "../components/AdminPanel";
 import { API_URL } from "../config";
 import LazyImage from "../components/LazyImage";
+import { formatDate } from "../utils.js";
+import {DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from '../cache.js'
 
-const DEFAULT_IMAGE = "https://via.placeholder.com/400x300?text=Image+indisponible";
-const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 jours
-
-const setCache = (key, value, ttlMs) => {
-  const record = { value, expiry: Date.now() + ttlMs };
-  localStorage.setItem(key, JSON.stringify(record));
-};
-
-const getCache = (key) => {
-  const record = localStorage.getItem(key);
-  if (!record) return null;
-  try {
-    const parsed = JSON.parse(record);
-    if (Date.now() > parsed.expiry) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return parsed.value;
-  } catch {
-    return null;
-  }
-};
-
-// Icône numérotée pour markers
-const createNumberedIcon = (number) =>
-  L.divIcon({
-    html: `<div style="
-      background:#2563eb;
-      color:white;
-      border-radius:50%;
-      width:28px;
-      height:28px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:14px;
-      font-weight:bold;
-      border:2px solid white;
-      box-shadow:0 0 4px rgba(0,0,0,0.3);
-    ">${number}</div>`,
-    className: "",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14],
-  });
-
-// Icône position utilisateur
-const myPositionIcon = L.divIcon({
-  html: `<div style="
-    background:red;
-    border-radius:50%;
-    width:20px;
-    height:20px;
-    border:3px solid white;
-    box-shadow:0 0 6px rgba(0,0,0,0.4);
-  "></div>`,
-  className: "",
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
-});
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
@@ -182,8 +123,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
-  const formatDate = (d) =>
-    new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return (
     <div className="flex h-screen">
@@ -229,7 +168,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <strong>{index + 1}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
-                  <div dangerouslySetInnerHTML={{ __html: e.description }} />
+                  <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
                   <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
                     🚗 Itinéraire Google Maps
