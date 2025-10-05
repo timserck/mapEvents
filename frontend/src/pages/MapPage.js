@@ -207,7 +207,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 ))}
               </select>
               <select
-                value={filterDate !== 'null' ? formatDate(filterDate): filterDate}
+                value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
                 className="border rounded p-2"
               >
