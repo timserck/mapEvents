@@ -207,13 +207,13 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 ))}
               </select>
               <select
-                value={formatDate(filterDate)}
+                value={filterDate !== 'null' ? formatDate(filterDate): filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
                 className="border rounded p-2"
               >
                 {uniqueDates.map((d) => (
                   <option key={d} value={d}>
-                    {formatDate(d)}
+                    {d !== 'null' ? formatDate(d): d}
                   </option>
                 ))}
               </select>
@@ -229,13 +229,13 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select
-            value={formatDate(filterType)}
+            value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             className="border rounded p-2"
           >
             {uniqueTypes.map((t) => (
               <option key={t} value={t}>
-                {formatDate(t)}
+                {t}
               </option>
             ))}
           </select>
