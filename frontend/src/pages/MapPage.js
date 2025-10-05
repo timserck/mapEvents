@@ -104,7 +104,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             `https://source.unsplash.com/400x300/?${query}`
           );
           if (res.ok && res.url) imageUrl = res.url;
-        } catch {}
+        } catch { }
       }
 
       // Wikidata fallback
@@ -119,6 +119,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
+  let initialCenter = [48.8566, 2.3522]; // fallback Paris
+
+
   // ---- useEffect: fetch events on mount ----
   useEffect(() => {
     fetchEvents();
@@ -127,6 +130,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   // ---- useEffect: fetch images when events change ----
   useEffect(() => {
     if (events.length > 0) fetchImagesForEvents(events);
+
+    // ---- Map initial center ----
+    initialCenter =
+      events.length > 0
+        ? [events[0].latitude, events[0].longitude]
+        : [48.8566, 2.3522]; // fallback Paris
+
+
   }, [events]);
 
   // ---- Geolocation ----
@@ -181,11 +192,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
-  // ---- Map initial center ----
-  const initialCenter =
-    events.length > 0
-      ? [events[0].latitude, events[0].longitude]
-      : [48.8566, 2.3522]; // fallback Paris
+
 
   return (
     <div className="flex h-screen">
@@ -213,7 +220,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               >
                 {uniqueDates.map((d) => (
                   <option key={d} value={d}>
-                    {d !== 'null' ? formatDate(d): d}
+                    {d !== 'null' ? formatDate(d) : d}
                   </option>
                 ))}
               </select>
