@@ -17,6 +17,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
+  const [center, setCenter] = useState([48.8566, 2.3522]); // 🌍 centre initial : Paris
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
@@ -40,9 +41,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       });
 
       if (wdRes.status === 429 && retries > 0) {
-        console.warn(
-          `⚠️ Wikidata rate limit reached, retry in ${delay / 1000}s...`
-        );
+        console.warn(`⚠️ Wikidata rate limit reached, retry in ${delay / 1000}s...`);
         await new Promise((res) => setTimeout(res, delay));
         return getWikidataImage(title, retries - 1, delay * 2);
       }
@@ -65,9 +64,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (mapRef.current && !userHasMovedMap) {
-        mapRef.current.setView([newEvent.latitude, newEvent.longitude], 14);
-      }
+      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
       return;
     }
 
@@ -81,8 +78,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       const data = await res.json();
       setEvents(data);
 
-      if (!userHasMovedMap && data.length > 0 && mapRef.current) {
-        mapRef.current.setView([data[0].latitude, data[0].longitude], 14);
+      if (!userHasMovedMap && data.length > 0) {
+        setCenter([data[0].latitude, data[0].longitude]);
       }
     } catch (err) {
       console.error("Fetch events error:", err);
@@ -100,11 +97,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       if (imageUrl === DEFAULT_IMAGE) {
         try {
           const query = encodeURIComponent(ev.title);
-          const res = await fetch(
-            `https://source.unsplash.com/400x300/?${query}`
-          );
+          const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
           if (res.ok && res.url) imageUrl = res.url;
-        } catch { }
+        } catch {}
       }
 
       // Wikidata fallback
@@ -119,9 +114,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
-  let initialCenter = [48.8566, 2.3522]; // fallback Paris
-
-
   // ---- useEffect: fetch events on mount ----
   useEffect(() => {
     fetchEvents();
@@ -130,14 +122,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   // ---- useEffect: fetch images when events change ----
   useEffect(() => {
     if (events.length > 0) fetchImagesForEvents(events);
-
-    // ---- Map initial center ----
-    initialCenter =
-      events.length > 0
-        ? [events[0].latitude, events[0].longitude]
-        : [48.8566, 2.3522]; // fallback Paris
-
-
   }, [events]);
 
   // ---- Geolocation ----
@@ -147,7 +131,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         (pos) => {
           const { latitude, longitude } = pos.coords;
           setUserPosition([latitude, longitude]);
-          if (mapRef.current) mapRef.current.setView([latitude, longitude], 14);
+          setCenter([latitude, longitude]);
           setUserHasMovedMap(true);
         },
         async () => await fallbackGeoAPI(),
@@ -165,15 +149,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       const { latitude, longitude, address } = data;
       setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
       setUserAddress(address);
-      if (mapRef.current)
-        mapRef.current.setView([parseFloat(latitude), parseFloat(longitude)], 14);
+      setCenter([parseFloat(latitude), parseFloat(longitude)]);
       setUserHasMovedMap(true);
     } catch (e) {
       console.error("Fallback geo fail:", e);
     }
   };
 
-  // ---- Track map movements to detect user navigation ----
+  // ---- Track map movements ----
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -191,8 +174,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
-
-
 
   return (
     <div className="flex h-screen">
@@ -220,7 +201,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               >
                 {uniqueDates.map((d) => (
                   <option key={d} value={d}>
-                    {d !== 'null' ? formatDate(d) : d}
+                    {d !== "null" ? formatDate(d) : d}
                   </option>
                 ))}
               </select>
@@ -234,6 +215,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </details>
         </div>
 
+        {/* Desktop filters */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -247,7 +229,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </select>
           <select
-            value={formatDate(filterDate)}
+            value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
             className="border rounded p-2"
           >
@@ -268,7 +250,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         {/* Map */}
         <MapContainer
           ref={mapRef}
-          center={initialCenter}
+          center={center} // ✅ centre contrôlé par l’état
           zoom={12}
           style={{ height: "100%", width: "100%" }}
         >
