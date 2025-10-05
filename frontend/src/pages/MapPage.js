@@ -207,13 +207,13 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 ))}
               </select>
               <select
-                value={filterDate}
+                value={formatDate(filterDate)}
                 onChange={(e) => setFilterDate(e.target.value)}
                 className="border rounded p-2"
               >
                 {uniqueDates.map((d) => (
                   <option key={d} value={d}>
-                    {d}
+                    {formatDate(d)}
                   </option>
                 ))}
               </select>
