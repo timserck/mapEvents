@@ -9,7 +9,7 @@ import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 
-// ✅ Petit composant interne pour forcer le recentrage quand `center` change
+// 🔁 Petit composant pour recentrer la carte quand le "center" change
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -28,21 +28,68 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
-  const [center, setCenter] = useState([48.8566, 2.3522]); // 🌍 Paris par défaut
+  const [center, setCenter] = useState([48.8566, 2.3522]); // 🗺️ Paris par défaut
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
+
+  // ---- Wikidata image fetch with retry ----
+  const getWikidataImage = async (title, retries = 3, delay = 2000) => {
+    const sparqlQuery = `
+      SELECT ?image WHERE {
+        ?place rdfs:label ?label.
+        FILTER(CONTAINS(LCASE(?label), "${title.toLowerCase()}")).
+        ?place wdt:P18 ?image.
+      } LIMIT 1
+    `;
+    const url =
+      "https://query.wikidata.org/sparql?format=json&query=" +
+      encodeURIComponent(sparqlQuery);
+
+    try {
+      const wdRes = await fetch(url, {
+        headers: { Accept: "application/sparql-results+json" },
+      });
+
+      if (wdRes.status === 429 && retries > 0) {
+        console.warn(
+          `⚠️ Wikidata rate limit reached, retry in ${delay / 1000}s...`
+        );
+        await new Promise((res) => setTimeout(res, delay));
+        return getWikidataImage(title, retries - 1, delay * 2);
+      }
+
+      if (wdRes.ok) {
+        const json = await wdRes.json();
+        const bindings = json?.results?.bindings || [];
+        if (bindings.length > 0 && bindings[0].image?.value) {
+          return bindings[0].image.value;
+        }
+      }
+    } catch (e) {
+      console.error("Wikidata error:", e);
+    }
+
+    return null;
+  };
 
   // ---- Fetch events ----
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents((prev) => [newEvent, ...prev]);
-      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
+      if (!userHasMovedMap) {
+        setCenter([newEvent.latitude, newEvent.longitude]);
+      }
       return;
     }
 
     try {
       const res = await fetch(`${API_URL}/events`);
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(`Expected JSON, got: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       setEvents(data);
 
@@ -54,18 +101,28 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // ---- Fetch event images ----
+  // ---- Fetch images for events ----
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
       const cacheKey = `event_image_${ev.id}`;
       let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
 
+      // Unsplash fallback
       if (imageUrl === DEFAULT_IMAGE) {
         try {
-          const res = await fetch(`https://source.unsplash.com/400x300/?${encodeURIComponent(ev.title)}`);
+          const query = encodeURIComponent(ev.title);
+          const res = await fetch(
+            `https://source.unsplash.com/400x300/?${query}`
+          );
           if (res.ok && res.url) imageUrl = res.url;
         } catch {}
+      }
+
+      // Wikidata fallback
+      if (imageUrl === DEFAULT_IMAGE) {
+        const wikidataImg = await getWikidataImage(ev.title);
+        if (wikidataImg) imageUrl = wikidataImg;
       }
 
       setCache(cacheKey, imageUrl, CACHE_TTL);
@@ -74,10 +131,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
+  // ---- useEffect: fetch events on mount ----
   useEffect(() => {
     fetchEvents();
   }, []);
 
+  // ---- useEffect: fetch images when events change ----
   useEffect(() => {
     if (events.length > 0) fetchImagesForEvents(events);
   }, [events]);
@@ -89,7 +148,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         (pos) => {
           const { latitude, longitude } = pos.coords;
           setUserPosition([latitude, longitude]);
-          setCenter([latitude, longitude]); // ✅ Recentre sur la position
+          setCenter([latitude, longitude]);
           setUserHasMovedMap(true);
         },
         async () => await fallbackGeoAPI(),
@@ -136,7 +195,43 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres */}
+        {/* Filters */}
+        <div className="p-2 bg-gray-100 md:hidden">
+          <details>
+            <summary className="cursor-pointer select-none">Filtres</summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="border rounded p-2"
+              >
+                {uniqueTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="border rounded p-2"
+              >
+                {uniqueDates.map((d) => (
+                  <option key={d} value={d}>
+                    {d !== "null" ? formatDate(d) : d}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={goToCurrentPosition}
+                className="bg-blue-500 text-white px-3 py-2 rounded"
+              >
+                Ma position
+              </button>
+            </div>
+          </details>
+        </div>
+
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select
             value={filterType}
@@ -150,7 +245,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </select>
           <select
-            value={filterDate}
+            value={formatDate(filterDate)}
             onChange={(e) => setFilterDate(e.target.value)}
             className="border rounded p-2"
           >
@@ -168,20 +263,20 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </button>
         </div>
 
-        {/* 🗺️ Carte */}
+        {/* Map */}
         <MapContainer
           ref={mapRef}
           center={[48.8566, 2.3522]}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
         >
-          {/* 🔁 Ce composant recentre quand le `center` change */}
           <MapCenterUpdater center={center} />
 
           <TileLayer
             attribution="&copy; OpenStreetMap"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
               <Marker
@@ -193,8 +288,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <strong>
                     {index + 1}. {e.title}
                   </strong>
-                  <p>{e.type} - {formatDate(e.date)}</p>
+                  <p>
+                    {e.type} - {formatDate(e.date)}
+                  </p>
                   <p>{e.address}</p>
+                  <div
+                    className="mt-2"
+                    dangerouslySetInnerHTML={{ __html: e.description }}
+                  />
                   <LazyImage
                     src={eventImages[e.id] || DEFAULT_IMAGE}
                     alt={e.title}
@@ -206,7 +307,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                     }}
                   />
                   <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                      e.address
+                    )}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-blue-500 underline block mt-2"
