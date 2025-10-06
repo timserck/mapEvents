@@ -9,7 +9,6 @@ import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 
-// 🔁 Recentre la carte quand le "center" change
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -18,23 +17,40 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM (ordre donné)
+// 🌍 Liste de serveurs OSRM publics (fallback auto)
+const OSRM_SERVERS = [
+  "https://router.project-osrm.org", // principal (souvent saturé)
+  "https://routing.openstreetmap.de/routed-foot",
+  "https://router.bikemap.net",
+  "https://routing.openstreetmap.fr/routed-car",
+];
+
+// 🔁 Essaie plusieurs serveurs OSRM pour tracer une route suivant les routes
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
   const allPoints = [start, ...points];
   const coords = coordsToOSRM(allPoints);
-  try {
-    const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`);
-    const data = await res.json();
-    if (data.routes && data.routes.length > 0)
-      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) {
-    console.error("OSRM multi-stop error", err);
+
+  for (const baseUrl of OSRM_SERVERS) {
+    try {
+      const url = `${baseUrl}/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0)
+        return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    } catch (err) {
+      console.warn(`⚠️ OSRM fallback sur ${baseUrl}: ${err.message}`);
+    }
   }
-  return [];
+  // fallback ligne droite
+  const fallback = [];
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    fallback.push(allPoints[i], allPoints[i + 1]);
+  }
+  return fallback;
 }
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
@@ -64,13 +80,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
       setEvents(data);
-      if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
+      if (!userHasMovedMap && data.length > 0)
+        setCenter([data[0].latitude, data[0].longitude]);
     } catch (err) {
       console.error("Fetch events error:", err);
     }
   };
 
-  // ---- Fetch images for events ----
+  // ---- Fetch images ----
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -105,7 +122,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
       );
-    } else { await fallbackGeoAPI(); }
+    } else {
+      await fallbackGeoAPI();
+    }
   };
 
   const fallbackGeoAPI = async () => {
@@ -117,7 +136,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setUserAddress(address);
       setCenter([parseFloat(latitude), parseFloat(longitude)]);
       setUserHasMovedMap(true);
-    } catch (e) { console.error("Fallback geo fail:", e); }
+    } catch (e) {
+      console.error("Fallback geo fail:", e);
+    }
   };
 
   // ---- Track map movements ----
@@ -131,28 +152,33 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   // ---- Filters ----
   const filteredEvents = events.filter(
-    e => (filterType === "all" || e.type === filterType) &&
-         (filterDate === "all" || e.date === filterDate)
+    e =>
+      (filterType === "all" || e.type === filterType) &&
+      (filterDate === "all" || e.date === filterDate)
   );
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch OSRM route ----
+  // ---- Fetch routes OSRM ----
   useEffect(() => {
-    const fetchRoute = async () => {
-      if (!userPosition || filteredEvents.length === 0) { setOsrmRoute([]); return; }
+    const fetchRoutes = async () => {
+      if (!userPosition || filteredEvents.length === 0) {
+        setOsrmRoute([]);
+        return;
+      }
       setLoading(true);
       const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-      setOsrmRoute(showRoutes ? await fetchOSRMRoutes(userPosition, points) : []);
+      const route = showRoutes ? await fetchOSRMRoutes(userPosition, points) : [];
+      setOsrmRoute(route);
       setLoading(false);
     };
-    fetchRoute();
+    fetchRoutes();
   }, [userPosition, filteredEvents, showRoutes]);
 
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filters */}
+        {/* Filtres */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
@@ -164,9 +190,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM
+                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+                Afficher le tracé
               </label>
-              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
+              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
+                Ma position
+              </button>
             </div>
           </details>
         </div>
@@ -179,9 +208,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM
+            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+            Afficher le tracé
           </label>
-          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
+          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
+            Ma position
+          </button>
         </div>
 
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
@@ -196,8 +228,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
-                  <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
+                  <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title}
+                    style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-500 underline block mt-2"
+                  >
                     🚗 Itinéraire Google Maps
                   </a>
                 </Popup>
@@ -205,11 +243,21 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
-          {userPosition && <Marker position={userPosition} icon={myPositionIcon}>
-            <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
-          </Marker>}
-          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
+          {showRoutes && osrmRoute.length > 1 && (
+            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.6} dashArray="10,10" />
+          )}
+
+          {userPosition && (
+            <Marker position={userPosition} icon={myPositionIcon}>
+              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
+            </Marker>
+          )}
+
+          {loading && (
+            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">
+              Chargement du tracé...
+            </div>
+          )}
         </MapContainer>
       </div>
 
@@ -221,7 +269,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <h3 className="font-semibold">Panel Admin</h3>
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
-            <div className="flex-1 overflow-y-auto"><AdminPanel refreshEvents={fetchEvents} /></div>
+            <div className="flex-1 overflow-y-auto">
+              <AdminPanel refreshEvents={fetchEvents} />
+            </div>
           </div>
         </div>
       )}
