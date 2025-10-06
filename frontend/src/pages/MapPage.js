@@ -18,7 +18,7 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Transforme [lat, lng] => lng,lat pour OSRM
+// Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
 // Fetch route multi-stop OSRM (ordre donné)
@@ -29,8 +29,11 @@ async function fetchOSRMRoutes(start, points) {
     const coords = coordsToOSRM(allPoints);
     const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`);
     const data = await res.json();
-    if (data.routes && data.routes.length > 0) return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) { console.error("OSRM multi-stop error", err); }
+    if (data.routes && data.routes.length > 0)
+      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+  } catch (err) {
+    console.error("OSRM multi-stop error", err);
+  }
   return [];
 }
 
@@ -42,8 +45,11 @@ async function fetchShortestTrip(start, points) {
     const coords = coordsToOSRM(allPoints);
     const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coords}?overview=full&geometries=geojson&source=first&roundtrip=false`);
     const data = await res.json();
-    if (data.trips && data.trips.length > 0) return data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) { console.error("OSRM shortest trip error", err); }
+    if (data.trips && data.trips.length > 0)
+      return data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
+  } catch (err) {
+    console.error("OSRM shortest trip error", err);
+  }
   return [];
 }
 
@@ -53,10 +59,7 @@ function interpolatePoints(p1, p2, steps) {
   const [lat1, lng1] = p1;
   const [lat2, lng2] = p2;
   for (let i = 0; i <= steps; i++) {
-    points.push([
-      lat1 + ((lat2 - lat1) * i) / steps,
-      lng1 + ((lng2 - lng1) * i) / steps
-    ]);
+    points.push([lat1 + ((lat2 - lat1) * i) / steps, lng1 + ((lng2 - lng1) * i) / steps]);
   }
   return points;
 }
@@ -76,6 +79,7 @@ function smoothPath(path, step = 5) {
 function AnimatedMarker({ path, speed = 50 }) {
   const [index, setIndex] = useState(0);
   const smoothedPath = smoothPath(path, 5);
+
   useEffect(() => {
     if (!smoothedPath || smoothedPath.length < 2) return;
     const interval = setInterval(() => {
@@ -83,6 +87,7 @@ function AnimatedMarker({ path, speed = 50 }) {
     }, speed);
     return () => clearInterval(interval);
   }, [smoothedPath, speed]);
+
   if (!smoothedPath || smoothedPath.length === 0) return null;
   return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
@@ -184,6 +189,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
   );
+
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
@@ -197,10 +203,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       }
       setLoading(true);
       const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-      if (showRoutes) setOsrmRoute(await fetchOSRMRoutes(userPosition, points));
-      else setOsrmRoute([]);
-      if (showShortestPath) setShortestRoute(await fetchShortestTrip(userPosition, points));
-      else setShortestRoute([]);
+      setOsrmRoute(showRoutes ? await fetchOSRMRoutes(userPosition, points) : []);
+      setShortestRoute(showShortestPath ? await fetchShortestTrip(userPosition, points) : []);
       setLoading(false);
     };
     fetchRoutes();
@@ -214,20 +218,40 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />Afficher le tracé animé</label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+                Afficher les tracés OSRM
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />
+                Afficher le tracé animé
+              </label>
               <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
             </div>
           </details>
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />Afficher le tracé animé</label>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+            Afficher les tracés OSRM
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />
+            Afficher le tracé animé
+          </label>
           <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
         </div>
 
@@ -244,7 +268,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">🚗 Itinéraire Google Maps</a>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
+                    🚗 Itinéraire Google Maps
+                  </a>
                 </Popup>
               </Marker>
             ))}
@@ -258,9 +284,17 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             <AnimatedMarker path={shortestRoute} speed={50} />
           )}
 
-          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
+          {userPosition && (
+            <Marker position={userPosition} icon={myPositionIcon}>
+              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
+            </Marker>
+          )}
 
-          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
+          {loading && (
+            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">
+              Chargement des tracés...
+            </div>
+          )}
         </MapContainer>
       </div>
 
@@ -272,7 +306,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <h3 className="font-semibold">Panel Admin</h3>
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
-            <div className="flex-1 overflow-y-auto"><AdminPanel refreshEvents={fetchEvents} /></div>
+            <div className="flex-1 overflow-y-auto">
+              <AdminPanel refreshEvents={fetchEvents} />
+            </div>
           </div>
         </div>
       )}
