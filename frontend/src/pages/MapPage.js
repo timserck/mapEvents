@@ -61,7 +61,7 @@ async function fetchORSRoute(points) {
   // ORS expects [[lng, lat], [lng, lat], ...]
   const coords = points.map(p => [p[1], p[0]]);
   try {
-    const res = await fetch("http://localhost:4000/ors-route", {
+    const res = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ coordinates: coords })
