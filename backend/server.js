@@ -269,30 +269,34 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
 
 // server.js or routes.js
 
-app.post("/ors-route", async (req, res) => {
+router.post("/ors-route", async (req, res) => {
   const { coordinates, profile = "foot-walking" } = req.body;
+
   if (!coordinates || coordinates.length < 2) {
     return res.status(400).json({ error: "start et end requis" });
   }
 
   try {
-    // Step 1: Snap points to nearest routable points
-    const snapRes = await fetch("https://api.openrouteservice.org/nearest", {
+    // 1️⃣ Snap points to nearest routable locations
+    const nearestRes = await fetch("https://api.openrouteservice.org/nearest", {
       method: "POST",
-      headers: {
+      headers: { 
         "Authorization": ORS_API_KEY,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ coordinates })
+      body: JSON.stringify({
+        coordinates: coordinates.map(toLngLat)
+      })
     });
-    const snapData = await snapRes.json();
-    if (snapData.error) {
-      return res.status(400).json({ error: snapData.error });
+    const nearestData = await nearestRes.json();
+
+    if (!nearestData || !nearestData.features || nearestData.features.length < 2) {
+      return res.status(400).json({ error: "No points could be snapped" });
     }
 
-    const snappedCoords = snapData.features.map(f => f.geometry.coordinates);
+    const snappedCoords = nearestData.features.map(f => f.geometry.coordinates);
 
-    // Step 2: Fetch route between snapped points
+    // 2️⃣ Fetch route
     const routeRes = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
       method: "POST",
       headers: {
@@ -303,10 +307,6 @@ app.post("/ors-route", async (req, res) => {
     });
 
     const routeData = await routeRes.json();
-    if (routeData.error) {
-      return res.status(400).json({ error: routeData.error });
-    }
-
     res.json(routeData);
 
   } catch (err) {
