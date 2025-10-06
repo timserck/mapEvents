@@ -30,6 +30,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]); // Paris par défaut
   const [showRoutes, setShowRoutes] = useState(true); // Toggle des tracés
+  const [shortestRoute, setShortestRoute] = useState(null); // Tracé optimisé
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
@@ -125,6 +126,32 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
 
+  // ---- OSRM shortest route ----
+  const fetchShortestRoute = async () => {
+    if (!userPosition || filteredEvents.length === 0) return;
+
+    const coords = [userPosition, ...filteredEvents.map(e => [e.latitude, e.longitude])]
+      .map(c => c.join(","))
+      .join(";");
+
+    const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0) {
+        const routeCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        setShortestRoute(routeCoords);
+      }
+    } catch (err) {
+      console.error("Erreur OSRM:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchShortestRoute();
+  }, [userPosition, filteredEvents]);
+
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
@@ -188,14 +215,24 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {/* Polyline depuis la position actuelle jusqu'aux événements */}
+          {/* Tracé linéaire bleu */}
           {showRoutes && userPosition && filteredEvents.length > 0 && (
             <Polyline
               positions={[userPosition, ...filteredEvents.map(e => [e.latitude, e.longitude])]}
               color="blue"
               weight={4}
               opacity={0.5}
-              dashArray="10,10"
+            />
+          )}
+
+          {/* Tracé optimisé OSRM rouge */}
+          {showRoutes && shortestRoute && (
+            <Polyline
+              positions={shortestRoute}
+              color="red"
+              weight={4}
+              opacity={0.5}
+              dashArray="5,10"
             />
           )}
 
