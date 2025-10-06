@@ -17,21 +17,19 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
+const coordsToOSRM = (points) => points.map((p) => `${p[1]},${p[0]}`).join(";");
 
-// 🌍 Liste de serveurs OSRM publics (fallback auto)
 const OSRM_SERVERS = [
-  "https://router.project-osrm.org", // principal (souvent saturé)
+  "https://router.project-osrm.org",
   "https://routing.openstreetmap.de/routed-foot",
   "https://router.bikemap.net",
   "https://routing.openstreetmap.fr/routed-car",
 ];
 
-// 🔁 Essaie plusieurs serveurs OSRM pour tracer une route suivant les routes
-async function fetchOSRMRoutes(start, points) {
-  if (!start || points.length === 0) return [];
-  const allPoints = [start, ...points];
-  const coords = coordsToOSRM(allPoints);
+// Fonction qui suit les routes avec fallback
+async function fetchOSRMRoutes(points) {
+  if (!points || points.length < 2) return [];
+  const coords = coordsToOSRM(points);
 
   for (const baseUrl of OSRM_SERVERS) {
     try {
@@ -40,15 +38,16 @@ async function fetchOSRMRoutes(start, points) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.routes && data.routes.length > 0)
-        return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        return data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
     } catch (err) {
-      console.warn(`⚠️ OSRM fallback sur ${baseUrl}: ${err.message}`);
+      console.warn(`⚠️ Fallback sur ${baseUrl}: ${err.message}`);
     }
   }
-  // fallback ligne droite
+
+  // Fallback direct
   const fallback = [];
-  for (let i = 0; i < allPoints.length - 1; i++) {
-    fallback.push(allPoints[i], allPoints[i + 1]);
+  for (let i = 0; i < points.length - 1; i++) {
+    fallback.push(points[i], points[i + 1]);
   }
   return fallback;
 }
@@ -60,34 +59,29 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
-  const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
   const [showRoutes, setShowRoutes] = useState(true);
   const [osrmRoute, setOsrmRoute] = useState([]);
   const [loading, setLoading] = useState(false);
-
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // ---- Fetch events ----
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
-      setEvents(prev => [newEvent, ...prev]);
-      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
+      setEvents((prev) => [newEvent, ...prev]);
+      setCenter([newEvent.latitude, newEvent.longitude]);
       return;
     }
     try {
       const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
       setEvents(data);
-      if (!userHasMovedMap && data.length > 0)
-        setCenter([data[0].latitude, data[0].longitude]);
+      if (data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
     } catch (err) {
-      console.error("Fetch events error:", err);
+      console.error("Erreur fetch events:", err);
     }
   };
 
-  // ---- Fetch images ----
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -103,21 +97,24 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setCache(cacheKey, imageUrl, CACHE_TTL);
       updatedImages[ev.id] = imageUrl;
     }
-    setEventImages(prev => ({ ...prev, ...updatedImages }));
+    setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
-  useEffect(() => { fetchEvents(); }, []);
-  useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
-  // ---- Geolocation ----
+  useEffect(() => {
+    if (events.length > 0) fetchImagesForEvents(events);
+  }, [events]);
+
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        pos => {
+        (pos) => {
           const { latitude, longitude } = pos.coords;
           setUserPosition([latitude, longitude]);
           setCenter([latitude, longitude]);
-          setUserHasMovedMap(true);
         },
         async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
@@ -135,45 +132,41 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
       setUserAddress(address);
       setCenter([parseFloat(latitude), parseFloat(longitude)]);
-      setUserHasMovedMap(true);
     } catch (e) {
       console.error("Fallback geo fail:", e);
     }
   };
 
-  // ---- Track map movements ----
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-    const onMove = () => setUserHasMovedMap(true);
-    map.on("movestart", onMove);
-    return () => map.off("movestart", onMove);
-  }, [mapRef.current]);
-
-  // ---- Filters ----
   const filteredEvents = events.filter(
-    e =>
+    (e) =>
       (filterType === "all" || e.type === filterType) &&
       (filterDate === "all" || e.date === filterDate)
   );
-  const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
-  const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch routes OSRM ----
+  const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
+  const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
+
+  // 🔁 Tracé en boucle
   useEffect(() => {
     const fetchRoutes = async () => {
-      if (!userPosition || filteredEvents.length === 0) {
+      if (filteredEvents.length < 2) {
         setOsrmRoute([]);
         return;
       }
+
       setLoading(true);
-      const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-      const route = showRoutes ? await fetchOSRMRoutes(userPosition, points) : [];
+      let points = filteredEvents.map((e) => [e.latitude, e.longitude]);
+
+      // Crée une boucle : retour au 1er event
+      points = [...points, points[0]];
+
+      const route = showRoutes ? await fetchOSRMRoutes(points) : [];
       setOsrmRoute(route);
       setLoading(false);
     };
+
     fetchRoutes();
-  }, [userPosition, filteredEvents, showRoutes]);
+  }, [filteredEvents, showRoutes]);
 
   return (
     <div className="flex h-screen">
@@ -183,14 +176,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
-                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
-                {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+              <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+                <input type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
                 Afficher le tracé
               </label>
               <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
@@ -201,14 +194,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
-            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
-            {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+            <input type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
             Afficher le tracé
           </label>
           <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
@@ -244,7 +237,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </MarkerClusterGroup>
 
           {showRoutes && osrmRoute.length > 1 && (
-            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.6} dashArray="10,10" />
+            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.7} dashArray="8,8" />
           )}
 
           {userPosition && (
