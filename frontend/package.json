@@ -15,7 +15,7 @@
     "postcss": "^8.4.24",
     "autoprefixer": "^10.4.14",
     "react-beautiful-dnd": "^13.1.1",
-    "openrouteservice-js": "^2.3.0"
+    "openrouteservice-js": "^2.2.1"
   },
   "devDependencies": {
     "ajv": "8.12.0",
