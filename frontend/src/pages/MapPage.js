@@ -21,7 +21,7 @@ function MapCenterUpdater({ center }) {
 // Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM (ordre donné)
+// Fetch route multi-stop OSRM
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
   try {
@@ -37,23 +37,32 @@ async function fetchOSRMRoutes(start, points) {
   return [];
 }
 
-// Fetch route “plus courte” OSRM (/trip endpoint) en batch pour éviter 429
-async function fetchShortestTrip(start, points, batchSize = 5, delay = 250) {
+// Nouvelle version robuste de fetchShortestTrip avec batch et retry
+async function fetchShortestTrip(start, points, batchSize = 5, delay = 500, maxRetries = 3) {
   if (!start || points.length === 0) return [];
   let allCoords = [];
 
-  const fetchBatch = async (batchPoints) => {
+  const fetchBatch = async (batchPoints, attempt = 1) => {
     const allPoints = [start, ...batchPoints];
     const coords = coordsToOSRM(allPoints);
     try {
       const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coords}?overview=full&geometries=geojson&source=first&roundtrip=false`);
-      const data = await res.json();
+      const text = await res.text();
+      const data = text.startsWith("{") ? JSON.parse(text) : null;
+      if (!data) throw new Error("Invalid JSON response");
+
       if (data.trips && data.trips.length > 0) {
         const coords = data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
         allCoords.push(...coords);
       }
     } catch (e) {
-      console.error("OSRM shortest trip batch error", e);
+      if (attempt < maxRetries) {
+        console.warn(`Retry batch (attempt ${attempt}) due to OSRM error:`, e);
+        await new Promise(r => setTimeout(r, delay * attempt));
+        return fetchBatch(batchPoints, attempt + 1);
+      } else {
+        console.error("OSRM shortest trip batch error", e);
+      }
     }
   };
 
