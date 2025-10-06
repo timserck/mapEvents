@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
@@ -55,36 +55,27 @@ function AnimatedMarker({ path, speed = 50 }) {
   return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
 
-// Debounce function: pure JS, no libraries
+// Debounce function
 function debounce(fn, delay) {
   let timer;
   const debounced = (...args) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
   };
-  debounced.cancel = () => clearTimeout(timer); // optional cancel
+  debounced.cancel = () => clearTimeout(timer);
   return debounced;
 }
 
-// Fetch route via ORS proxy with radius and profile
+// Fetch route via backend ORS proxy
 async function fetchORSRoute(points, radius = 1000, profile = "foot-walking") {
-  if (!points || !Array.isArray(points) || points.length < 2) {
-    console.error("fetchORSRoute: Il faut au moins 2 points pour calculer un itinéraire");
-    return [];
-  }
-
-  const coords = points.map(p => {
-    if (!Array.isArray(p) || p.length !== 2) {
-      throw new Error(`Point invalide: ${p}`);
-    }
-    return [p[1], p[0]]; // [lng, lat] for ORS
-  });
+  if (!points || points.length < 2) return [];
+  const coords = points.map(p => [p[1], p[0]]); // [lng, lat]
 
   try {
     const res = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: coords, radius, profile }) // pass radius & profile
+      body: JSON.stringify({ coordinates: coords, radius, profile })
     });
 
     if (!res.ok) {
@@ -95,7 +86,7 @@ async function fetchORSRoute(points, radius = 1000, profile = "foot-walking") {
 
     const data = await res.json();
     if (data.features && data.features[0]?.geometry?.coordinates) {
-      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // [lat, lng]
+      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
     } else if (data.error) {
       console.warn("ORS fetch route error:", data.error.message);
       return [];
@@ -108,7 +99,6 @@ async function fetchORSRoute(points, radius = 1000, profile = "foot-walking") {
     return [];
   }
 }
-
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
@@ -188,19 +178,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setOsrmRoute([]);
       return;
     }
-
     const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-
-    // Debounced fetch
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
       const route = showRoutes ? await fetchORSRoute(pts, 1000, "foot-walking") : [];
       setOsrmRoute(route);
       setLoading(false);
     }, 1000);
-
     fetchRouteDebounced(points);
-
     return () => fetchRouteDebounced.cancel?.();
   }, [filteredEvents, showRoutes]);
 
