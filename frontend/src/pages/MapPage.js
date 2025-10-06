@@ -21,7 +21,7 @@ function MapCenterUpdater({ center }) {
 // Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM
+// Fetch route multi-stop OSRM (ordre donné)
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
   const allPoints = [start, ...points];
@@ -57,44 +57,8 @@ async function fetchShortestTripBatched(start, points, batchSize = 3, delay = 50
     }
     await new Promise(r => setTimeout(r, delay));
   }
+
   return fullRoute;
-}
-
-// Interpolation linéaire entre deux points
-function interpolatePoints(p1, p2, steps) {
-  const points = [];
-  const [lat1, lng1] = p1;
-  const [lat2, lng2] = p2;
-  for (let i = 0; i <= steps; i++) {
-    points.push([lat1 + ((lat2 - lat1) * i) / steps, lng1 + ((lng2 - lng1) * i) / steps]);
-  }
-  return points;
-}
-
-// Génère un chemin lissé pour animation
-function smoothPath(path, step = 5) {
-  if (!path || path.length < 2) return path;
-  let smoothed = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    smoothed.push(...interpolatePoints(path[i], path[i + 1], step));
-  }
-  smoothed.push(path[path.length - 1]);
-  return smoothed;
-}
-
-// Composant pour animer un marqueur sur un tracé
-function AnimatedMarker({ path, speed = 50 }) {
-  const [index, setIndex] = useState(0);
-  const smoothedPath = smoothPath(path, 5);
-
-  useEffect(() => {
-    if (!smoothedPath || smoothedPath.length < 2) return;
-    const interval = setInterval(() => setIndex(prev => (prev + 1 < smoothedPath.length ? prev + 1 : prev)), speed);
-    return () => clearInterval(interval);
-  }, [smoothedPath, speed]);
-
-  if (!smoothedPath || smoothedPath.length === 0) return null;
-  return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
@@ -232,12 +196,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
-              <Marker
-                key={e.id}
-                position={[e.latitude, e.longitude]}
-                icon={createNumberedIcon(index + 1, e.type)}
-                eventHandlers={{ click: (ev) => ev.target.openPopup() }} // 🔑 Popup fix
-              >
+              <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1, e.type)}>
                 <Popup minWidth={250}>
                   <strong>{index + 1}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
@@ -253,7 +212,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </MarkerClusterGroup>
 
           {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
-          {showShortestPath && shortestRoute.length > 1 && <AnimatedMarker path={shortestRoute} speed={50} />}
           {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
           {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
         </MapContainer>
