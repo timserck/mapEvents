@@ -18,39 +18,55 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Convert [lat, lng] => "lng,lat" pour OSRM
+// ---- OSRM Utilities ----
+const MAX_OSRM_POINTS = 10;
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
-
-// Fetch route multi-stop OSRM (ordre donné)
-async function fetchOSRMRoutes(start, points) {
-  if (!start || points.length === 0) return [];
-  try {
-    const allPoints = [start, ...points];
-    const coords = coordsToOSRM(allPoints);
-    const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`);
-    const data = await res.json();
-    if (data.routes && data.routes.length > 0)
-      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) {
-    console.error("OSRM multi-stop error", err);
-  }
-  return [];
+function chunkArray(array, size) {
+  const result = [];
+  for (let i = 0; i < array.length; i += size) result.push(array.slice(i, i + size));
+  return result;
 }
 
-// Fetch route “plus courte” OSRM (/trip endpoint)
+// Fetch route multi-stop OSRM
+async function fetchOSRMRoutes(start, points) {
+  if (!start || points.length === 0) return [];
+  const batches = chunkArray(points, MAX_OSRM_POINTS);
+  let allCoords = [];
+  for (const batch of batches) {
+    const allPoints = [start, ...batch];
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coordsToOSRM(allPoints)}?overview=full&geometries=geojson`);
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0) {
+        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        allCoords.push(...coords);
+      }
+    } catch (err) {
+      console.error("OSRM multi-stop batch error", err);
+    }
+  }
+  return allCoords;
+}
+
+// Fetch route plus courte OSRM (/trip)
 async function fetchShortestTrip(start, points) {
   if (!start || points.length === 0) return [];
-  try {
-    const allPoints = [start, ...points];
-    const coords = coordsToOSRM(allPoints);
-    const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coords}?overview=full&geometries=geojson&source=first&roundtrip=false`);
-    const data = await res.json();
-    if (data.trips && data.trips.length > 0)
-      return data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) {
-    console.error("OSRM shortest trip error", err);
+  const batches = chunkArray(points, MAX_OSRM_POINTS);
+  let allCoords = [];
+  for (const batch of batches) {
+    const allPoints = [start, ...batch];
+    try {
+      const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coordsToOSRM(allPoints)}?overview=full&geometries=geojson&source=first&roundtrip=false`);
+      const data = await res.json();
+      if (data.trips && data.trips.length > 0) {
+        const coords = data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        allCoords.push(...coords);
+      }
+    } catch (err) {
+      console.error("OSRM shortest trip batch error", err);
+    }
   }
-  return [];
+  return allCoords;
 }
 
 // Interpolation linéaire entre deux points
@@ -92,6 +108,7 @@ function AnimatedMarker({ path, speed = 50 }) {
   return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
 
+// ---- Main Component ----
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
   const [eventImages, setEventImages] = useState({});
@@ -189,7 +206,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
   );
-
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
@@ -210,10 +226,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     fetchRoutes();
   }, [userPosition, filteredEvents, showRoutes, showShortestPath]);
 
+  // ---- Render ----
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filters */}
+        {/* Filters UI */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
@@ -276,25 +293,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && osrmRoute.length > 1 && (
-            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />
-          )}
+          {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
+          {showShortestPath && shortestRoute.length > 1 && <AnimatedMarker path={shortestRoute} speed={50} />}
+          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
 
-          {showShortestPath && shortestRoute.length > 1 && (
-            <AnimatedMarker path={shortestRoute} speed={50} />
-          )}
-
-          {userPosition && (
-            <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
-            </Marker>
-          )}
-
-          {loading && (
-            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">
-              Chargement des tracés...
-            </div>
-          )}
+          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
         </MapContainer>
       </div>
 
