@@ -267,10 +267,10 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
-// --- OpenRouteService Route ---
 app.post("/ors-route", async (req, res) => {
-  const { start, end, profile = "foot-walking" } = req.body;
-  if (!start || !end) return res.status(400).json({ error: "start et end requis" });
+  const { coordinates, profile = "foot-walking" } = req.body;
+  if (!coordinates || coordinates.length < 2)
+    return res.status(400).json({ error: "start et end requis" });
 
   try {
     const response = await fetch(
@@ -278,7 +278,7 @@ app.post("/ors-route", async (req, res) => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates: [start, end] }),
+        body: JSON.stringify({ coordinates }),
       }
     );
     const data = await response.json();
@@ -288,6 +288,7 @@ app.post("/ors-route", async (req, res) => {
     res.status(500).json({ error: "ORS routing error" });
   }
 });
+
 
 // --- Start server ---
 app.listen(4000, () => console.log("🚀 Server running on port 4000"));
