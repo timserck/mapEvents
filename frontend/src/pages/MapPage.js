@@ -57,42 +57,39 @@ function AnimatedMarker({ path, speed = 50 }) {
 
 // Fetch route via ORS proxy
 async function fetchORSRoute(points) {
-  if (!points || points.length < 2) {
-    console.warn("fetchORSRoute: Il faut au moins 2 points");
+  // Vérifie que le tableau de points est valide
+  if (!points || !Array.isArray(points) || points.length < 2) {
+    console.error("fetchORSRoute: Il faut au moins 2 points pour calculer un itinéraire");
     return [];
   }
 
-  // Vérifie que chaque point a exactement 2 valeurs numériques
+  // Transforme [lat, lng] → [lng, lat] pour ORS
   const coords = points.map(p => {
     if (!Array.isArray(p) || p.length !== 2) {
-      throw new Error(`Point invalide: ${JSON.stringify(p)}`);
+      throw new Error(`Point invalide: ${p}`);
     }
-    const [lat, lng] = p.map(Number);
-    if (isNaN(lat) || isNaN(lng)) {
-      throw new Error(`Point contient des valeurs non numériques: ${JSON.stringify(p)}`);
-    }
-    return [lng, lat]; // ORS attend [lng, lat]
+    return [p[1], p[0]];
   });
 
   try {
     const res = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: coords }),
+      body: JSON.stringify({ coordinates: coords })
     });
 
     if (!res.ok) {
-      console.error("ORS fetch route HTTP error", res.status, await res.text());
+      const errData = await res.json().catch(() => ({}));
+      console.error("ORS fetch route HTTP error", res.status, errData);
       return [];
     }
 
     const data = await res.json();
-
-    if (data.features?.[0]?.geometry?.coordinates) {
-      // Convertit de [lng, lat] en [lat, lng] pour l'affichage local
+    if (data.features && data.features[0]?.geometry?.coordinates) {
+      // Transforme à nouveau [lng, lat] → [lat, lng]
       return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
     } else {
-      console.warn("ORS fetch route: pas de coordonnées renvoyées");
+      console.error("ORS fetch route: pas de coordonnées dans la réponse", data);
       return [];
     }
   } catch (err) {
@@ -100,6 +97,7 @@ async function fetchORSRoute(points) {
     return [];
   }
 }
+
 
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
