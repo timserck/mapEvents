@@ -66,45 +66,48 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// Fetch ORS route with snapping to nearest routable points
+// Snap points via /ors-nearest first, then fetch route
 async function fetchORSRoute(points, profile = "foot-walking") {
   if (!points || points.length < 2) return [];
 
   try {
-    // Snap points first
-    const snapRes = await fetch(`${API_URL}/ors-nearest`, {
+    // 1️⃣ Snap points
+    const nearestRes = await fetch(`${API_URL}/ors-nearest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: points.map(p => [p[1], p[0]]) }) // [lng, lat]
+      body: JSON.stringify({ coordinates: points })
     });
-    const snapData = await snapRes.json();
-    if (snapData.error) {
-      console.warn("ORS nearest error:", snapData.error.message);
-      return [];
-    }
-    const snappedCoords = snapData?.features?.map(f => f.geometry.coordinates);
-    if (!snappedCoords || snappedCoords.length < 2) return [];
 
-    // Fetch route
+    const nearestData = await nearestRes.json();
+    if (!nearestData.snappedCoordinates || nearestData.snappedCoordinates.length < 2) {
+      console.warn("Could not snap points, using original coordinates");
+      return points;
+    }
+
+    // ORS expects [lng, lat]
+    const coordsForRoute = nearestData.snappedCoordinates.map(c => c);
+
+    // 2️⃣ Fetch route
     const routeRes = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: snappedCoords, profile })
+      body: JSON.stringify({ coordinates: coordsForRoute, profile })
     });
+
     const routeData = await routeRes.json();
-    if (routeData.error) {
-      console.warn("ORS routing error:", routeData.error.message);
+    if (routeData.features && routeData.features[0]?.geometry?.coordinates) {
+      return routeData.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // [lat, lng]
+    } else {
+      console.warn("ORS route returned no coordinates", routeData);
       return [];
     }
-    if (routeData.features && routeData.features[0]?.geometry?.coordinates) {
-      return routeData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-    }
-    return [];
+
   } catch (err) {
-    console.error("ORS fetch route error:", err);
+    console.error("ORS fetch route error", err);
     return [];
   }
 }
+
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
