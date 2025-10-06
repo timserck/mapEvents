@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
@@ -55,20 +55,29 @@ function AnimatedMarker({ path, speed = 50 }) {
   return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
 
+// Debounce function: pure JS, no libraries
+function debounce(fn, delay) {
+  let timer;
+  const debounced = (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+  debounced.cancel = () => clearTimeout(timer); // optional cancel
+  return debounced;
+}
+
 // Fetch route via ORS proxy
 async function fetchORSRoute(points) {
-  // Vérifie que le tableau de points est valide
   if (!points || !Array.isArray(points) || points.length < 2) {
     console.error("fetchORSRoute: Il faut au moins 2 points pour calculer un itinéraire");
     return [];
   }
 
-  // Transforme [lat, lng] → [lng, lat] pour ORS
   const coords = points.map(p => {
     if (!Array.isArray(p) || p.length !== 2) {
       throw new Error(`Point invalide: ${p}`);
     }
-    return [p[1], p[0]];
+    return [p[1], p[0]]; // [lng, lat] for ORS
   });
 
   try {
@@ -86,8 +95,7 @@ async function fetchORSRoute(points) {
 
     const data = await res.json();
     if (data.features && data.features[0]?.geometry?.coordinates) {
-      // Transforme à nouveau [lng, lat] → [lat, lng]
-      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // [lat, lng]
     } else {
       console.error("ORS fetch route: pas de coordonnées dans la réponse", data);
       return [];
@@ -97,8 +105,6 @@ async function fetchORSRoute(points) {
     return [];
   }
 }
-
-
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
@@ -172,19 +178,26 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch route ----
+  // ---- Fetch route (debounced) ----
   useEffect(() => {
-    const fetchRoute = async () => {
-      if (filteredEvents.length === 0) {
-        setOsrmRoute([]);
-        return;
-      }
+    if (filteredEvents.length === 0) {
+      setOsrmRoute([]);
+      return;
+    }
+
+    const points = filteredEvents.map(e => [e.latitude, e.longitude]);
+
+    // Debounced fetch
+    const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-      setOsrmRoute(showRoutes ? await fetchORSRoute(points) : []);
+      const route = showRoutes ? await fetchORSRoute(pts) : [];
+      setOsrmRoute(route);
       setLoading(false);
-    };
-    fetchRoute();
+    }, 1000);
+
+    fetchRouteDebounced(points);
+
+    return () => fetchRouteDebounced.cancel?.();
   }, [filteredEvents, showRoutes]);
 
   return (
