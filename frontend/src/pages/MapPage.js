@@ -21,7 +21,7 @@ function MapCenterUpdater({ center }) {
 // Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM (ordre donné)
+// Fetch route multi-stop OSRM
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
   const allPoints = [start, ...points];
@@ -57,7 +57,6 @@ async function fetchShortestTripBatched(start, points, batchSize = 3, delay = 50
     }
     await new Promise(r => setTimeout(r, delay));
   }
-
   return fullRoute;
 }
 
@@ -233,14 +232,21 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
-              <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1, e.type)}>
+              <Marker
+                key={e.id}
+                position={[e.latitude, e.longitude]}
+                icon={createNumberedIcon(index + 1, e.type)}
+                eventHandlers={{ click: (ev) => ev.target.openPopup() }} // 🔑 Popup fix
+              >
                 <Popup minWidth={250}>
                   <strong>{index + 1}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">🚗 Itinéraire Google Maps</a>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
+                    🚗 Itinéraire Google Maps
+                  </a>
                 </Popup>
               </Marker>
             ))}
