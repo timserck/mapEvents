@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
 import { createNumberedIcon, myPositionIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel";
-import { API_URL } from "../config";
+import { API_URL, ORS_API_KEY } from "../config";
 import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 
+// 🔁 Recentre la carte quand le "center" change
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -17,39 +18,30 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-const coordsToOSRM = (points) => points.map((p) => `${p[1]},${p[0]}`).join(";");
+// Convert [lat, lng] => [lng, lat] pour ORS
+const coordsToORS = points => points.map(p => [p[1], p[0]]);
 
-const OSRM_SERVERS = [
-  "https://router.project-osrm.org",
-  "https://routing.openstreetmap.de/routed-foot",
-  "https://router.bikemap.net",
-  "https://routing.openstreetmap.fr/routed-car",
-];
-
-// Fonction qui suit les routes avec fallback
-async function fetchOSRMRoutes(points) {
+// Fetch ORS route (loop)
+async function fetchORSRoute(points) {
   if (!points || points.length < 2) return [];
-  const coords = coordsToOSRM(points);
-
-  for (const baseUrl of OSRM_SERVERS) {
-    try {
-      const url = `${baseUrl}/route/v1/foot/${coords}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data.routes && data.routes.length > 0)
-        return data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
-    } catch (err) {
-      console.warn(`⚠️ Fallback sur ${baseUrl}: ${err.message}`);
+  const coordinates = coordsToORS(points);
+  try {
+    const res = await fetch("https://api.openrouteservice.org/v2/directions/foot-walking/geojson", {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ coordinates })
+    });
+    const data = await res.json();
+    if (data.features && data.features.length > 0) {
+      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
     }
+  } catch (err) {
+    console.error("ORS route error", err);
   }
-
-  // Fallback direct
-  const fallback = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    fallback.push(points[i], points[i + 1]);
-  }
-  return fallback;
+  return [];
 }
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
@@ -59,29 +51,30 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [filterDate, setFilterDate] = useState("all");
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
+  const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
-  const [showRoutes, setShowRoutes] = useState(true);
-  const [osrmRoute, setOsrmRoute] = useState([]);
+  const [route, setRoute] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
+  // ---- Fetch events ----
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
-      setEvents((prev) => [newEvent, ...prev]);
-      setCenter([newEvent.latitude, newEvent.longitude]);
+      setEvents(prev => [newEvent, ...prev]);
+      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
       return;
     }
     try {
       const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
       setEvents(data);
-      if (data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
-    } catch (err) {
-      console.error("Erreur fetch events:", err);
-    }
+      if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
+    } catch (err) { console.error("Fetch events error:", err); }
   };
 
+  // ---- Fetch images ----
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -97,31 +90,26 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setCache(cacheKey, imageUrl, CACHE_TTL);
       updatedImages[ev.id] = imageUrl;
     }
-    setEventImages((prev) => ({ ...prev, ...updatedImages }));
+    setEventImages(prev => ({ ...prev, ...updatedImages }));
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
 
-  useEffect(() => {
-    if (events.length > 0) fetchImagesForEvents(events);
-  }, [events]);
-
+  // ---- Geolocation ----
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
+        pos => {
           const { latitude, longitude } = pos.coords;
           setUserPosition([latitude, longitude]);
           setCenter([latitude, longitude]);
+          setUserHasMovedMap(true);
         },
         async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
       );
-    } else {
-      await fallbackGeoAPI();
-    }
+    } else { await fallbackGeoAPI(); }
   };
 
   const fallbackGeoAPI = async () => {
@@ -132,81 +120,64 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
       setUserAddress(address);
       setCenter([parseFloat(latitude), parseFloat(longitude)]);
-    } catch (e) {
-      console.error("Fallback geo fail:", e);
-    }
+      setUserHasMovedMap(true);
+    } catch (e) { console.error("Fallback geo fail:", e); }
   };
 
-  const filteredEvents = events.filter(
-    (e) =>
-      (filterType === "all" || e.type === filterType) &&
-      (filterDate === "all" || e.date === filterDate)
-  );
-
-  const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
-  const uniqueDates = ["all", ...new Set(events.map((e) => e.date))];
-
-  // 🔁 Tracé en boucle
+  // ---- Track map movements ----
   useEffect(() => {
-    const fetchRoutes = async () => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const onMove = () => setUserHasMovedMap(true);
+    map.on("movestart", onMove);
+    return () => map.off("movestart", onMove);
+  }, [mapRef.current]);
+
+  // ---- Filters ----
+  const filteredEvents = events.filter(
+    e => (filterType === "all" || e.type === filterType) &&
+         (filterDate === "all" || e.date === filterDate)
+  );
+  const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
+  const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
+
+  // ---- Fetch ORS route ----
+  useEffect(() => {
+    const fetchRoute = async () => {
       if (filteredEvents.length < 2) {
-        setOsrmRoute([]);
+        setRoute([]);
         return;
       }
-
       setLoading(true);
-      let points = filteredEvents.map((e) => [e.latitude, e.longitude]);
-
-      // Crée une boucle : retour au 1er event
-      points = [...points, points[0]];
-
-      const route = showRoutes ? await fetchOSRMRoutes(points) : [];
-      setOsrmRoute(route);
+      const points = filteredEvents.map(e => [e.latitude, e.longitude]);
+      // boucle: revenir au premier point
+      points.push([filteredEvents[0].latitude, filteredEvents[0].longitude]);
+      const r = await fetchORSRoute(points);
+      setRoute(r);
       setLoading(false);
     };
-
-    fetchRoutes();
-  }, [filteredEvents, showRoutes]);
+    fetchRoute();
+  }, [filteredEvents]);
 
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filtres */}
+        {/* Filters */}
         <div className="p-2 bg-gray-100 md:hidden">
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
-                {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
-                {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
-                Afficher le tracé
-              </label>
-              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
-                Ma position
-              </button>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
+              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
             </div>
           </details>
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border rounded p-2">
-            {uniqueTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded p-2">
-            {uniqueDates.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
-            Afficher le tracé
-          </label>
-          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">
-            Ma position
-          </button>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
+          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
         </div>
 
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
@@ -221,36 +192,16 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
-                  <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title}
-                    style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-500 underline block mt-2"
-                  >
-                    🚗 Itinéraire Google Maps
-                  </a>
+                  <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">🚗 Itinéraire Google Maps</a>
                 </Popup>
               </Marker>
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && osrmRoute.length > 1 && (
-            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.7} dashArray="8,8" />
-          )}
-
-          {userPosition && (
-            <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
-            </Marker>
-          )}
-
-          {loading && (
-            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">
-              Chargement du tracé...
-            </div>
-          )}
+          {route.length > 1 && <Polyline positions={route} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
+          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
+          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement du tracé...</div>}
         </MapContainer>
       </div>
 
@@ -262,9 +213,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <h3 className="font-semibold">Panel Admin</h3>
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} />
-            </div>
+            <div className="flex-1 overflow-y-auto"><AdminPanel refreshEvents={fetchEvents} /></div>
           </div>
         </div>
       )}
