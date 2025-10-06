@@ -21,58 +21,44 @@ function MapCenterUpdater({ center }) {
 // Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM
+// Fetch route multi-stop OSRM (ordre donné)
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
+  const allPoints = [start, ...points];
+  const coords = coordsToOSRM(allPoints);
   try {
-    const allPoints = [start, ...points];
-    const coords = coordsToOSRM(allPoints);
     const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`);
     const data = await res.json();
-    if (data.routes && data.routes.length > 0)
-      return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-  } catch (err) {
-    console.error("OSRM multi-stop error", err);
-  }
+    if (data.routes && data.routes.length > 0) return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+  } catch (err) { console.error("OSRM multi-stop error", err); }
   return [];
 }
 
-// Nouvelle version robuste de fetchShortestTrip avec batch et retry
-async function fetchShortestTrip(start, points, batchSize = 5, delay = 500, maxRetries = 3) {
+// Batch OSRM "shortest trip" pour éviter les 429
+async function fetchShortestTripBatched(start, points, batchSize = 3, delay = 500) {
   if (!start || points.length === 0) return [];
-  let allCoords = [];
+  const allPoints = [start, ...points];
+  let fullRoute = [];
 
-  const fetchBatch = async (batchPoints, attempt = 1) => {
-    const allPoints = [start, ...batchPoints];
-    const coords = coordsToOSRM(allPoints);
+  for (let i = 0; i < allPoints.length - 1; i += batchSize) {
+    const batch = allPoints.slice(i, i + batchSize + 1); // +1 pour le point de départ
+    const coords = coordsToOSRM(batch);
     try {
       const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coords}?overview=full&geometries=geojson&source=first&roundtrip=false`);
-      const text = await res.text();
-      const data = text.startsWith("{") ? JSON.parse(text) : null;
-      if (!data) throw new Error("Invalid JSON response");
-
+      if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+      const data = await res.json();
       if (data.trips && data.trips.length > 0) {
-        const coords = data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        allCoords.push(...coords);
+        fullRoute.push(...data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]));
       }
-    } catch (e) {
-      if (attempt < maxRetries) {
-        console.warn(`Retry batch (attempt ${attempt}) due to OSRM error:`, e);
-        await new Promise(r => setTimeout(r, delay * attempt));
-        return fetchBatch(batchPoints, attempt + 1);
-      } else {
-        console.error("OSRM shortest trip batch error", e);
-      }
+    } catch (err) {
+      console.error("OSRM shortest trip batch error", err);
+      // fallback linéaire si OSRM rate
+      for (let j = 0; j < batch.length - 1; j++) fullRoute.push(batch[j], batch[j + 1]);
     }
-  };
-
-  for (let i = 0; i < points.length; i += batchSize) {
-    const batch = points.slice(i, i + batchSize);
-    await fetchBatch(batch);
-    await new Promise(r => setTimeout(r, delay)); // pause pour limiter les 429
+    await new Promise(r => setTimeout(r, delay));
   }
 
-  return allCoords;
+  return fullRoute;
 }
 
 // Interpolation linéaire entre deux points
@@ -104,9 +90,7 @@ function AnimatedMarker({ path, speed = 50 }) {
 
   useEffect(() => {
     if (!smoothedPath || smoothedPath.length < 2) return;
-    const interval = setInterval(() => {
-      setIndex(prev => (prev + 1 < smoothedPath.length ? prev + 1 : prev));
-    }, speed);
+    const interval = setInterval(() => setIndex(prev => (prev + 1 < smoothedPath.length ? prev + 1 : prev)), speed);
     return () => clearInterval(interval);
   }, [smoothedPath, speed]);
 
@@ -134,11 +118,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   // ---- Fetch events ----
   const fetchEvents = async (newEvent) => {
-    if (newEvent) {
-      setEvents(prev => [newEvent, ...prev]);
-      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
-      return;
-    }
+    if (newEvent) { setEvents(prev => [newEvent, ...prev]); if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]); return; }
     try {
       const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
@@ -173,12 +153,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const goToCurrentPosition = async () => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        pos => {
-          const { latitude, longitude } = pos.coords;
-          setUserPosition([latitude, longitude]);
-          setCenter([latitude, longitude]);
-          setUserHasMovedMap(true);
-        },
+        pos => { const { latitude, longitude } = pos.coords; setUserPosition([latitude, longitude]); setCenter([latitude, longitude]); setUserHasMovedMap(true); },
         async () => await fallbackGeoAPI(),
         { enableHighAccuracy: true }
       );
@@ -211,22 +186,17 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
   );
-
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
   // ---- Fetch routes OSRM ----
   useEffect(() => {
     const fetchRoutes = async () => {
-      if (!userPosition || filteredEvents.length === 0) {
-        setOsrmRoute([]);
-        setShortestRoute([]);
-        return;
-      }
+      if (!userPosition || filteredEvents.length === 0) { setOsrmRoute([]); setShortestRoute([]); return; }
       setLoading(true);
       const points = filteredEvents.map(e => [e.latitude, e.longitude]);
       setOsrmRoute(showRoutes ? await fetchOSRMRoutes(userPosition, points) : []);
-      setShortestRoute(showShortestPath ? await fetchShortestTrip(userPosition, points) : []);
+      setShortestRoute(showShortestPath ? await fetchShortestTripBatched(userPosition, points, 3, 500) : []);
       setLoading(false);
     };
     fetchRoutes();
@@ -240,40 +210,20 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
-                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
-                {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
-                Afficher les tracés OSRM
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />
-                Afficher le tracé animé
-              </label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />Afficher le tracé animé</label>
               <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
             </div>
           </details>
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
-            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
-            {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
-            Afficher les tracés OSRM
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />
-            Afficher le tracé animé
-          </label>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés OSRM</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={showShortestPath} onChange={e => setShowShortestPath(e.target.checked)} />Afficher le tracé animé</label>
           <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
         </div>
 
@@ -290,33 +240,16 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
-                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
-                    🚗 Itinéraire Google Maps
-                  </a>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">🚗 Itinéraire Google Maps</a>
                 </Popup>
               </Marker>
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && osrmRoute.length > 1 && (
-            <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />
-          )}
-
-          {showShortestPath && shortestRoute.length > 1 && (
-            <AnimatedMarker path={shortestRoute} speed={50} />
-          )}
-
-          {userPosition && (
-            <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
-            </Marker>
-          )}
-
-          {loading && (
-            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">
-              Chargement des tracés...
-            </div>
-          )}
+          {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
+          {showShortestPath && shortestRoute.length > 1 && <AnimatedMarker path={shortestRoute} speed={50} />}
+          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
+          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
         </MapContainer>
       </div>
 
@@ -328,9 +261,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <h3 className="font-semibold">Panel Admin</h3>
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} />
-            </div>
+            <div className="flex-1 overflow-y-auto"><AdminPanel refreshEvents={fetchEvents} /></div>
           </div>
         </div>
       )}
