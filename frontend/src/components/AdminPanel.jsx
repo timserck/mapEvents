@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
 import { API_URL } from "../config";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { getTypeColor } from "../leafletSetup"; // 🎨 importe la même fonction que la carte
+import { getTypeColor } from "../leafletSetup"; // 🎨 Ajout : pour récupérer la couleur aléatoire du type
 
 export default function AdminPanel({ refreshEvents }) {
   const { token } = useAuth();
@@ -54,6 +54,7 @@ export default function AdminPanel({ refreshEvents }) {
     let finalLat = latitude;
     let finalLon = longitude;
 
+    // Si coords manquantes ou adresse modifiée → géocodage automatique
     if ((!finalLat || !finalLon) || (editingEvent && editingEvent.address !== address)) {
       try {
         const res = await fetch(
@@ -119,6 +120,7 @@ export default function AdminPanel({ refreshEvents }) {
     setLongitude(null);
   };
 
+  // Delete single event
   const handleDelete = async (id) => {
     await fetch(`${API_URL}/events/${id}`, {
       method: "DELETE",
@@ -128,6 +130,7 @@ export default function AdminPanel({ refreshEvents }) {
     refreshEvents();
   };
 
+  // Delete all events
   const deleteAllEvents = async () => {
     if (!window.confirm("⚠️ Êtes-vous sûr de vouloir supprimer TOUS les événements ?")) return;
     await fetch(`${API_URL}/events`, {
@@ -138,6 +141,7 @@ export default function AdminPanel({ refreshEvents }) {
     refreshEvents();
   };
 
+  // Bulk upload
   const handleBulkUpload = async () => {
     try {
       const eventsData = JSON.parse(bulkInput);
@@ -159,6 +163,7 @@ export default function AdminPanel({ refreshEvents }) {
     }
   };
 
+  // Photon autocomplete
   const handleAddressChange = async (e) => {
     const value = e.target.value;
     setAddress(value);
@@ -193,6 +198,7 @@ export default function AdminPanel({ refreshEvents }) {
     setSuggestions([]);
   };
 
+  // Drag & Drop reorder
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
     const items = Array.from(events);
@@ -215,9 +221,12 @@ export default function AdminPanel({ refreshEvents }) {
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
       {/* Form */}
-      {/* ... ton formulaire inchangé ... */}
+      {/* --- inchangé --- */}
 
-      {/* Events Table */}
+      {/* Bulk Upload */}
+      {/* --- inchangé --- */}
+
+      {/* Events Table with Drag & Drop */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
       <div className="overflow-x-auto min-h-[600px]">
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -233,7 +242,7 @@ export default function AdminPanel({ refreshEvents }) {
                     <th className="border p-2">#</th>
                     <th className="border p-2">Titre</th>
                     <th className="border p-2">Type</th>
-                    <th className="border p-2">Couleur</th>
+                    <th className="border p-2">Couleur</th> {/* 🎨 ajout */}
                     <th className="border p-2">Date</th>
                     <th className="border p-2">Adresse</th>
                     <th className="border p-2">Actions</th>
@@ -251,6 +260,8 @@ export default function AdminPanel({ refreshEvents }) {
                           <td className="border p-2">{index}</td>
                           <td className="border p-2">{e.title}</td>
                           <td className="border p-2">{e.type}</td>
+
+                          {/* 🎨 Cercle de couleur basé sur le type */}
                           <td className="border p-2 text-center">
                             <div
                               style={{
@@ -263,6 +274,7 @@ export default function AdminPanel({ refreshEvents }) {
                               }}
                             />
                           </td>
+
                           <td className="border p-2">
                             {new Date(e.date).toLocaleDateString("fr-FR")}
                           </td>
@@ -291,6 +303,16 @@ export default function AdminPanel({ refreshEvents }) {
             )}
           </Droppable>
         </DragDropContext>
+      </div>
+
+      {/* Delete All */}
+      <div className="w-full p-4">
+        <button
+          onClick={deleteAllEvents}
+          className="bg-red-600 text-white px-4 py-2 mt-2 rounded hover:bg-red-700 w-full transition"
+        >
+          Supprimer tous les événements
+        </button>
       </div>
     </div>
   );
