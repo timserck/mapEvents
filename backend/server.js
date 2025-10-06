@@ -316,30 +316,48 @@ app.post("/ors-route", async (req, res) => {
 });
 
 
-// Optional: endpoint to snap points to nearest routable road
 app.post("/ors-nearest", async (req, res) => {
   const { coordinates } = req.body;
-
-  if (!coordinates || coordinates.length === 0)
-    return res.status(400).json({ error: "No coordinates provided" });
+  if (!coordinates || coordinates.length < 1) {
+    return res.status(400).json({ error: "Au moins 1 point requis" });
+  }
 
   try {
-    const response = await fetch(
-      `https://api.openrouteservice.org/v2/nearest/foot-walking?api_key=${ORS_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates })
-      }
-    );
+    // Ensure coordinates are [lng, lat] for ORS
+    const coords = coordinates.map(p => {
+      if (!Array.isArray(p) || p.length !== 2) throw new Error(`Coordonnée invalide: ${p}`);
+      return [p[0], p[1]]; // adjust if needed: [lng, lat]
+    });
 
-    const data = await response.json();
-    res.json(data);
+    const response = await fetch("https://api.openrouteservice.org/nearest", {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ coordinates: coords })
+    });
+
+    const text = await response.text(); // read as text first
+    let data;
+    try {
+      data = JSON.parse(text); // parse JSON safely
+    } catch {
+      console.error("ORS nearest returned non-JSON:", text);
+      return res.status(502).json({ error: "ORS nearest returned invalid response" });
+    }
+
+    if (data.error) return res.status(400).json({ error: data.error });
+
+    const snappedCoords = data.features.map(f => f.geometry.coordinates);
+    res.json({ snappedCoordinates: snappedCoords });
+
   } catch (err) {
     console.error("ORS nearest error:", err);
-    res.status(500).json({ error: "ORS nearest error" });
+    res.status(500).json({ error: "ORS nearest internal error" });
   }
 });
+
 
 
 
