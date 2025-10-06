@@ -268,19 +268,28 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
 });
 
 app.post("/ors-route", async (req, res) => {
-  const { coordinates, profile = "foot-walking" } = req.body;
+  const { coordinates, profile = "foot-walking", radius = 1000 } = req.body; // added radius
   if (!coordinates || coordinates.length < 2)
     return res.status(400).json({ error: "start et end requis" });
 
   try {
+    // Include options with radius
+    const body = {
+      coordinates,
+      options: {
+        radius: Array(coordinates.length).fill(radius) // radius for each point
+      }
+    };
+
     const response = await fetch(
-      `https://api.openrouteservice.org/v2/directions/${profile}?api_key=${ORS_API_KEY}`,
+      `https://api.openrouteservice.org/v2/directions/${profile}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates }),
+        headers: { "Content-Type": "application/json", "Authorization": ORS_API_KEY },
+        body: JSON.stringify(body),
       }
     );
+
     const data = await response.json();
     res.json(data);
   } catch (err) {
@@ -288,6 +297,7 @@ app.post("/ors-route", async (req, res) => {
     res.status(500).json({ error: "ORS routing error" });
   }
 });
+
 
 
 // --- Start server ---

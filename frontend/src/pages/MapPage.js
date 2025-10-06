@@ -66,8 +66,8 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// Fetch route via ORS proxy
-async function fetchORSRoute(points) {
+// Fetch route via ORS proxy with radius and profile
+async function fetchORSRoute(points, radius = 1000, profile = "foot-walking") {
   if (!points || !Array.isArray(points) || points.length < 2) {
     console.error("fetchORSRoute: Il faut au moins 2 points pour calculer un itinéraire");
     return [];
@@ -84,7 +84,7 @@ async function fetchORSRoute(points) {
     const res = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: coords })
+      body: JSON.stringify({ coordinates: coords, radius, profile }) // pass radius & profile
     });
 
     if (!res.ok) {
@@ -96,6 +96,9 @@ async function fetchORSRoute(points) {
     const data = await res.json();
     if (data.features && data.features[0]?.geometry?.coordinates) {
       return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]); // [lat, lng]
+    } else if (data.error) {
+      console.warn("ORS fetch route error:", data.error.message);
+      return [];
     } else {
       console.error("ORS fetch route: pas de coordonnées dans la réponse", data);
       return [];
@@ -105,6 +108,7 @@ async function fetchORSRoute(points) {
     return [];
   }
 }
+
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
@@ -190,7 +194,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     // Debounced fetch
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const route = showRoutes ? await fetchORSRoute(pts) : [];
+      const route = showRoutes ? await fetchORSRoute(pts, 1000, "foot-walking") : [];
       setOsrmRoute(route);
       setLoading(false);
     }, 1000);
