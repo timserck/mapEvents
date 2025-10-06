@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
 import { API_URL } from "../config";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { getTypeColor } from "../leafletSetup"; // 🎨 Ajout : pour récupérer la couleur aléatoire du type
+import { getTypeColor } from "../leaflet";
 
 export default function AdminPanel({ refreshEvents }) {
   const { token } = useAuth();
