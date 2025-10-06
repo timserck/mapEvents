@@ -268,7 +268,7 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
 });
 
 // --- OpenRouteService Route ---
-app.post("/ors-route", authMiddleware, async (req, res) => {
+app.post("/ors-route", async (req, res) => {
   const { start, end, profile = "foot-walking" } = req.body;
   if (!start || !end) return res.status(400).json({ error: "start et end requis" });
 
