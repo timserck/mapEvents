@@ -1,3 +1,4 @@
+require("dotenv").config(); // charge les variables .env
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
@@ -8,13 +9,13 @@ const cors = require("cors");
 const fetch = require("node-fetch");
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
+const ORS_API_KEY = process.env.ORS_API_KEY;
 
 // Enable CORS
 const allowedOrigins = [
   "http://localhost:3000",
   "http://192.168.1.190:3000",
-  "https://timserck.duckdns.org"   // ajoute aussi ton domaine en prod
-
+  "https://timserck.duckdns.org" // ajoute ton domaine prod
 ];
 
 app.use(
@@ -33,7 +34,7 @@ app.use(
 
 app.use(bodyParser.json());
 
-// Auth middleware
+// --- Middlewares ---
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "No token" });
@@ -47,14 +48,13 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// Admin-only middleware
 function adminMiddleware(req, res, next) {
   if (req.user.role !== "admin")
     return res.status(403).json({ error: "Admin only" });
   next();
 }
 
-// Geocode address
+// --- Helpers ---
 async function geocodeAddress(address) {
   try {
     const res = await fetch(
@@ -75,7 +75,7 @@ async function geocodeAddress(address) {
   return null;
 }
 
-// Login route
+// --- Auth ---
 app.post("/auth/login", async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -101,20 +101,17 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// POST /events - Créer un événement
+// --- Routes Events ---
 app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
   let { title, type, date, latitude, longitude, description, address, position } = req.body;
 
   try {
-    // Validation des champs obligatoires
     if (!title || !type || !date || !address) {
       return res.status(400).json({ error: "title, type, date et address sont requis" });
     }
 
-    // Formater la date pour PostgreSQL (YYYY-MM-DD)
     if (date.includes("T")) date = date.split("T")[0];
 
-    // Géocodage automatique si lat/lon manquants
     if (!latitude || !longitude) {
       const geo = await geocodeAddress(address);
       if (!geo) return res.status(400).json({ error: "Impossible de géocoder l'adresse" });
@@ -122,7 +119,6 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
       longitude = geo.longitude;
     }
 
-    // Calcul de la position
     if (!position) {
       const posRes = await pool.query("SELECT COALESCE(MAX(position),0)+1 AS next FROM events");
       position = posRes.rows[0].next;
@@ -144,21 +140,17 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// PUT /events/:id - Mettre à jour un événement
 app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { id } = req.params;
   let { title, type, date, description, address, latitude, longitude } = req.body;
 
   try {
-    // Validation
     if (!title || !type || !date || !address) {
       return res.status(400).json({ error: "title, type, date et address sont requis" });
     }
 
-    // Formater la date
     if (date.includes("T")) date = date.split("T")[0];
 
-    // Géocodage si lat/lon manquants ou adresse modifiée
     if (!latitude || !longitude) {
       const geo = await geocodeAddress(address);
       if (!geo) return res.status(400).json({ error: "Impossible de géocoder l'adresse" });
@@ -186,8 +178,6 @@ app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-
-// Delete event
 app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
@@ -199,7 +189,6 @@ app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// Get events
 app.get("/events", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -223,33 +212,18 @@ app.get("/events", async (req, res) => {
   }
 });
 
-
-// Delete all events (admin only)
-app.delete("/events", authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    await pool.query("DELETE FROM events");
-    res.json({ success: true, message: "All events deleted" });
-  } catch (err) {
-    console.error("Delete all events error:", err);
-    res.status(500).json({ error: "DB delete all error" });
-  }
-});
-
-
-// Bulk insert events (admin only)
+// Bulk insert
 app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
-  const { events } = req.body; // tableau [{title, type, date, address, description, latitude, longitude}]
+  const { events } = req.body;
   if (!Array.isArray(events) || events.length === 0) {
     return res.status(400).json({ error: "Events array required" });
   }
 
   try {
     const insertedEvents = [];
-
     for (let ev of events) {
       let { title, type, date, address, description, latitude, longitude } = ev;
 
-      // Si seulement l'adresse est fournie → géocoder
       if (address && (!latitude || !longitude)) {
         const geo = await geocodeAddress(address);
         if (geo) {
@@ -266,7 +240,6 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
                    ST_X(location::geometry) AS longitude`,
         [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`]
       );
-
       insertedEvents.push(result.rows[0]);
     }
 
@@ -277,12 +250,10 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-
-
-
+// Reorder events
 app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { orderedIds } = req.body; // tableau d'IDs dans le nouvel ordre
+    const { orderedIds } = req.body;
     const queries = orderedIds.map((id, idx) =>
       pool.query("UPDATE events SET order_index = $1 WHERE id = $2", [idx, id])
     );
@@ -296,7 +267,27 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
+// --- OpenRouteService Route ---
+app.post("/route", authMiddleware, async (req, res) => {
+  const { start, end, profile = "foot-walking" } = req.body;
+  if (!start || !end) return res.status(400).json({ error: "start et end requis" });
 
+  try {
+    const response = await fetch(
+      `https://api.openrouteservice.org/v2/directions/${profile}?api_key=${ORS_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coordinates: [start, end] }),
+      }
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error("ORS routing error:", err);
+    res.status(500).json({ error: "ORS routing error" });
+  }
+});
 
-
+// --- Start server ---
 app.listen(4000, () => console.log("🚀 Server running on port 4000"));

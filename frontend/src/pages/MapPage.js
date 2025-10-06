@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
 import { createNumberedIcon, myPositionIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel";
-import { API_URL, ORS_API_KEY } from "../config";
+import { API_URL } from "../config";
 import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
@@ -18,28 +18,60 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Convert [lat, lng] => [lng, lat] pour ORS
-const coordsToORS = points => points.map(p => [p[1], p[0]]);
+// Interpolation linéaire entre deux points
+function interpolatePoints(p1, p2, steps) {
+  const points = [];
+  const [lat1, lng1] = p1;
+  const [lat2, lng2] = p2;
+  for (let i = 0; i <= steps; i++) {
+    points.push([lat1 + ((lat2 - lat1) * i) / steps, lng1 + ((lng2 - lng1) * i) / steps]);
+  }
+  return points;
+}
 
-// Fetch ORS route (loop)
+// Génère un chemin lissé pour animation
+function smoothPath(path, step = 5) {
+  if (!path || path.length < 2) return path;
+  let smoothed = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    smoothed.push(...interpolatePoints(path[i], path[i + 1], step));
+  }
+  smoothed.push(path[path.length - 1]);
+  return smoothed;
+}
+
+// Composant pour animer un marqueur sur un tracé
+function AnimatedMarker({ path, speed = 50 }) {
+  const [index, setIndex] = useState(0);
+  const smoothedPath = smoothPath(path, 5);
+
+  useEffect(() => {
+    if (!smoothedPath || smoothedPath.length < 2) return;
+    const interval = setInterval(() => setIndex(prev => (prev + 1 < smoothedPath.length ? prev + 1 : prev)), speed);
+    return () => clearInterval(interval);
+  }, [smoothedPath, speed]);
+
+  if (!smoothedPath || smoothedPath.length === 0) return null;
+  return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
+}
+
+// Fetch route via ORS proxy
 async function fetchORSRoute(points) {
   if (!points || points.length < 2) return [];
-  const coordinates = coordsToORS(points);
+  // ORS expects [[lng, lat], [lng, lat], ...]
+  const coords = points.map(p => [p[1], p[0]]);
   try {
-    const res = await fetch("https://api.openrouteservice.org/v2/directions/foot-walking/geojson", {
+    const res = await fetch("http://localhost:4000/ors-route", {
       method: "POST",
-      headers: {
-        "Authorization": ORS_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ coordinates })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coordinates: coords })
     });
     const data = await res.json();
-    if (data.features && data.features.length > 0) {
+    if (data.features && data.features[0].geometry.coordinates) {
       return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
     }
   } catch (err) {
-    console.error("ORS route error", err);
+    console.error("ORS fetch route error", err);
   }
   return [];
 }
@@ -53,7 +85,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
-  const [route, setRoute] = useState([]);
+  const [showRoutes, setShowRoutes] = useState(true);
+  const [osrmRoute, setOsrmRoute] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const mapRef = useRef();
@@ -71,7 +104,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       const data = await res.json();
       setEvents(data);
       if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
-    } catch (err) { console.error("Fetch events error:", err); }
+    } catch (err) {
+      console.error("Fetch events error:", err);
+    }
   };
 
   // ---- Fetch images ----
@@ -96,34 +131,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => { fetchEvents(); }, []);
   useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
 
-  // ---- Geolocation ----
-  const goToCurrentPosition = async () => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const { latitude, longitude } = pos.coords;
-          setUserPosition([latitude, longitude]);
-          setCenter([latitude, longitude]);
-          setUserHasMovedMap(true);
-        },
-        async () => await fallbackGeoAPI(),
-        { enableHighAccuracy: true }
-      );
-    } else { await fallbackGeoAPI(); }
-  };
-
-  const fallbackGeoAPI = async () => {
-    try {
-      const res = await fetch("https://timserck.duckdns.org/geoapi/");
-      const data = await res.json();
-      const { latitude, longitude, address } = data;
-      setUserPosition([parseFloat(latitude), parseFloat(longitude)]);
-      setUserAddress(address);
-      setCenter([parseFloat(latitude), parseFloat(longitude)]);
-      setUserHasMovedMap(true);
-    } catch (e) { console.error("Fallback geo fail:", e); }
-  };
-
   // ---- Track map movements ----
   useEffect(() => {
     if (!mapRef.current) return;
@@ -141,23 +148,20 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch ORS route ----
+  // ---- Fetch route ----
   useEffect(() => {
     const fetchRoute = async () => {
-      if (filteredEvents.length < 2) {
-        setRoute([]);
+      if (filteredEvents.length === 0) {
+        setOsrmRoute([]);
         return;
       }
       setLoading(true);
       const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-      // boucle: revenir au premier point
-      points.push([filteredEvents[0].latitude, filteredEvents[0].longitude]);
-      const r = await fetchORSRoute(points);
-      setRoute(r);
+      setOsrmRoute(showRoutes ? await fetchORSRoute(points) : []);
       setLoading(false);
     };
     fetchRoute();
-  }, [filteredEvents]);
+  }, [filteredEvents, showRoutes]);
 
   return (
     <div className="flex h-screen">
@@ -169,7 +173,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             <div className="mt-2 flex flex-col gap-2">
               <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
               <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-              <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés ORS</label>
             </div>
           </details>
         </div>
@@ -177,7 +181,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
           <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
           <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-          <button onClick={goToCurrentPosition} className="bg-blue-500 text-white px-3 py-2 rounded">Ma position</button>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés ORS</label>
         </div>
 
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
@@ -199,7 +203,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {route.length > 1 && <Polyline positions={route} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
+          {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
           {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
           {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement du tracé...</div>}
         </MapContainer>
