@@ -9,7 +9,7 @@ import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 
-// 🔁 Recentre la carte quand le "center" change
+// MapCenterUpdater: recenter map when center changes
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -18,7 +18,7 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Interpolation linéaire entre deux points
+// Linear interpolation between two points
 function interpolatePoints(p1, p2, steps) {
   const points = [];
   const [lat1, lng1] = p1;
@@ -29,7 +29,7 @@ function interpolatePoints(p1, p2, steps) {
   return points;
 }
 
-// Génère un chemin lissé pour animation
+// Smooth a path for animation
 function smoothPath(path, step = 5) {
   if (!path || path.length < 2) return path;
   let smoothed = [];
@@ -40,7 +40,7 @@ function smoothPath(path, step = 5) {
   return smoothed;
 }
 
-// Composant pour animer un marqueur sur un tracé
+// Animated marker along a path
 function AnimatedMarker({ path, speed = 50 }) {
   const [index, setIndex] = useState(0);
   const smoothedPath = smoothPath(path, 5);
@@ -55,7 +55,7 @@ function AnimatedMarker({ path, speed = 50 }) {
   return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
 }
 
-// Debounce function
+// Simple debounce
 function debounce(fn, delay) {
   let timer;
   const debounced = (...args) => {
@@ -66,36 +66,42 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// Fetch route via backend ORS proxy
-async function fetchORSRoute(points, radius = 1000, profile = "foot-walking") {
+// Fetch ORS route with snapping to nearest routable points
+async function fetchORSRoute(points, profile = "foot-walking") {
   if (!points || points.length < 2) return [];
-  const coords = points.map(p => [p[1], p[0]]); // [lng, lat]
 
   try {
-    const res = await fetch(`${API_URL}/ors-route`, {
+    // Snap points first
+    const snapRes = await fetch(`${API_URL}/ors-nearest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: coords, radius, profile })
+      body: JSON.stringify({ coordinates: points.map(p => [p[1], p[0]]) }) // [lng, lat]
     });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      console.error("ORS fetch route HTTP error", res.status, errData);
+    const snapData = await snapRes.json();
+    if (snapData.error) {
+      console.warn("ORS nearest error:", snapData.error.message);
       return [];
     }
+    const snappedCoords = snapData?.features?.map(f => f.geometry.coordinates);
+    if (!snappedCoords || snappedCoords.length < 2) return [];
 
-    const data = await res.json();
-    if (data.features && data.features[0]?.geometry?.coordinates) {
-      return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
-    } else if (data.error) {
-      console.warn("ORS fetch route error:", data.error.message);
-      return [];
-    } else {
-      console.error("ORS fetch route: pas de coordonnées dans la réponse", data);
+    // Fetch route
+    const routeRes = await fetch(`${API_URL}/ors-route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coordinates: snappedCoords, profile })
+    });
+    const routeData = await routeRes.json();
+    if (routeData.error) {
+      console.warn("ORS routing error:", routeData.error.message);
       return [];
     }
+    if (routeData.features && routeData.features[0]?.geometry?.coordinates) {
+      return routeData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    }
+    return [];
   } catch (err) {
-    console.error("ORS fetch route error", err);
+    console.error("ORS fetch route error:", err);
     return [];
   }
 }
@@ -116,7 +122,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // ---- Fetch events ----
+  // Fetch events
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents(prev => [newEvent, ...prev]);
@@ -133,7 +139,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // ---- Fetch images ----
+  // Fetch images
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -155,7 +161,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => { fetchEvents(); }, []);
   useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
 
-  // ---- Track map movements ----
+  // Track map movements
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -164,7 +170,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // ---- Filters ----
+  // Filters
   const filteredEvents = events.filter(
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
@@ -172,16 +178,17 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch route (debounced) ----
+  // Fetch route (debounced)
   useEffect(() => {
     if (filteredEvents.length === 0) {
       setOsrmRoute([]);
       return;
     }
+
     const points = filteredEvents.map(e => [e.latitude, e.longitude]);
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const route = showRoutes ? await fetchORSRoute(pts, 1000, "foot-walking") : [];
+      const route = showRoutes ? await fetchORSRoute(pts) : [];
       setOsrmRoute(route);
       setLoading(false);
     }, 1000);
@@ -197,17 +204,31 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés ORS</label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+                Afficher les tracés ORS
+              </label>
             </div>
           </details>
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés ORS</label>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />
+            Afficher les tracés ORS
+          </label>
         </div>
 
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>

@@ -267,35 +267,80 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
   }
 });
 
+// server.js or routes.js
+
 app.post("/ors-route", async (req, res) => {
-  const { coordinates, profile = "foot-walking", radius = 1000 } = req.body;
-  if (!coordinates || coordinates.length < 2)
+  const { coordinates, profile = "foot-walking" } = req.body;
+  if (!coordinates || coordinates.length < 2) {
     return res.status(400).json({ error: "start et end requis" });
+  }
 
   try {
-    const body = {
-      coordinates,
-      options: {
-        radius: Array(coordinates.length).fill(radius) // radius for each point
-      }
-    };
+    // Step 1: Snap points to nearest routable points
+    const snapRes = await fetch("https://api.openrouteservice.org/nearest", {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ coordinates })
+    });
+    const snapData = await snapRes.json();
+    if (snapData.error) {
+      return res.status(400).json({ error: snapData.error });
+    }
 
+    const snappedCoords = snapData.features.map(f => f.geometry.coordinates);
+
+    // Step 2: Fetch route between snapped points
+    const routeRes = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`, {
+      method: "POST",
+      headers: {
+        "Authorization": ORS_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ coordinates: snappedCoords })
+    });
+
+    const routeData = await routeRes.json();
+    if (routeData.error) {
+      return res.status(400).json({ error: routeData.error });
+    }
+
+    res.json(routeData);
+
+  } catch (err) {
+    console.error("ORS routing error:", err);
+    res.status(500).json({ error: "ORS routing error" });
+  }
+});
+
+
+// Optional: endpoint to snap points to nearest routable road
+app.post("/ors-nearest", async (req, res) => {
+  const { coordinates } = req.body;
+
+  if (!coordinates || coordinates.length === 0)
+    return res.status(400).json({ error: "No coordinates provided" });
+
+  try {
     const response = await fetch(
-      `https://api.openrouteservice.org/v2/directions/${profile}?api_key=${ORS_API_KEY}`,
+      `https://api.openrouteservice.org/v2/nearest/foot-walking?api_key=${ORS_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ coordinates })
       }
     );
 
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error("ORS routing error:", err);
-    res.status(500).json({ error: "ORS routing error" });
+    console.error("ORS nearest error:", err);
+    res.status(500).json({ error: "ORS nearest error" });
   }
 });
+
 
 
 
