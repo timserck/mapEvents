@@ -21,40 +21,58 @@ function MapCenterUpdater({ center }) {
 // Convert [lat, lng] => "lng,lat" pour OSRM
 const coordsToOSRM = points => points.map(p => `${p[1]},${p[0]}`).join(";");
 
-// Fetch route multi-stop OSRM
+// Fetch route multi-stop OSRM avec cache
 async function fetchOSRMRoutes(start, points) {
   if (!start || points.length === 0) return [];
   const allPoints = [start, ...points];
-  const coords = coordsToOSRM(allPoints);
+  const cacheKey = `osrm_route_${coordsToOSRM(allPoints)}`;
+
+  const cached = getCache(cacheKey);
+  if (cached) return cached;
+
   try {
-    const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`);
+    const res = await fetch(`https://router.project-osrm.org/route/v1/foot/${coordsToOSRM(allPoints)}?overview=full&geometries=geojson`);
     const data = await res.json();
-    if (data.routes && data.routes.length > 0) return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    if (data.routes && data.routes.length > 0) {
+      const route = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      setCache(cacheKey, route, CACHE_TTL);
+      return route;
+    }
   } catch (err) { console.error("OSRM multi-stop error", err); }
-  return [];
+
+  return allPoints; // fallback linéaire
 }
 
-// Batch OSRM "shortest trip" pour éviter les 429
+// Batch shortest trip avec cache
 async function fetchShortestTripBatched(start, points, batchSize = 3, delay = 500) {
   if (!start || points.length === 0) return [];
   const allPoints = [start, ...points];
   let fullRoute = [];
 
   for (let i = 0; i < allPoints.length - 1; i += batchSize) {
-    const batch = allPoints.slice(i, i + batchSize + 1); // +1 pour le point de départ
-    const coords = coordsToOSRM(batch);
+    const batch = allPoints.slice(i, i + batchSize + 1);
+    const cacheKey = `osrm_trip_${coordsToOSRM(batch)}`;
+    const cached = getCache(cacheKey);
+    if (cached) {
+      fullRoute.push(...cached);
+      continue;
+    }
+
     try {
-      const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coords}?overview=full&geometries=geojson&source=first&roundtrip=false`);
+      const res = await fetch(`https://router.project-osrm.org/trip/v1/foot/${coordsToOSRM(batch)}?overview=full&geometries=geojson&source=first&roundtrip=false`);
       if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
       const data = await res.json();
       if (data.trips && data.trips.length > 0) {
-        fullRoute.push(...data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]));
+        const route = data.trips[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        fullRoute.push(...route);
+        setCache(cacheKey, route, CACHE_TTL);
       }
     } catch (err) {
       console.error("OSRM shortest trip batch error", err);
-      // fallback linéaire si OSRM rate
+      // fallback linéaire
       for (let j = 0; j < batch.length - 1; j++) fullRoute.push(batch[j], batch[j + 1]);
     }
+
     await new Promise(r => setTimeout(r, delay));
   }
 
@@ -81,7 +99,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   // ---- Fetch events ----
   const fetchEvents = async (newEvent) => {
-    if (newEvent) { setEvents(prev => [newEvent, ...prev]); if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]); return; }
+    if (newEvent) {
+      setEvents(prev => [newEvent, ...prev]);
+      if (!userHasMovedMap) setCenter([newEvent.latitude, newEvent.longitude]);
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/events`);
       const data = await res.json();
@@ -210,6 +232,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </MarkerClusterGroup>
 
           {showRoutes && osrmRoute.length > 1 && <Polyline positions={osrmRoute} color="blue" weight={4} opacity={0.5} dashArray="10,10" />}
+          {showShortestPath && shortestRoute.length > 1 && <Polyline positions={shortestRoute} color="red" weight={4} opacity={0.7} />}
           {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
           {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement des tracés...</div>}
         </MapContainer>
