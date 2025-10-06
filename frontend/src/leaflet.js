@@ -12,7 +12,7 @@ function getRandomColor() {
 }
 
 // 🎨 Fonction qui renvoie la couleur d’un type (génère si pas encore connue)
-function getTypeColor(type = "default") {
+export function getTypeColor(type = "default") {
   const key = type?.toLowerCase() || "default";
   if (!typeColorMap[key]) {
     typeColorMap[key] = getRandomColor();
