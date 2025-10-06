@@ -282,7 +282,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <Marker
                 key={e.id}
                 position={[e.latitude, e.longitude]}
-                icon={createNumberedIcon(index + 1)}
+                icon={createNumberedIcon(index + 1, e.type)}
               >
                 <Popup minWidth={250}>
                   <strong>
