@@ -318,45 +318,45 @@ app.post("/ors-route", async (req, res) => {
 
 app.post("/ors-nearest", async (req, res) => {
   const { coordinates } = req.body;
-  if (!coordinates || coordinates.length < 1) {
-    return res.status(400).json({ error: "Au moins 1 point requis" });
-  }
+  if (!coordinates || !coordinates.length) return res.status(400).json({ error: "At least 1 point required" });
 
   try {
-    // Ensure coordinates are [lng, lat] for ORS
-    const coords = coordinates.map(p => {
-      if (!Array.isArray(p) || p.length !== 2) throw new Error(`Coordonnée invalide: ${p}`);
-      return [p[0], p[1]]; // adjust if needed: [lng, lat]
-    });
+    // Snap each point individually
+    const snappedCoordinates = [];
+    for (let p of coordinates) {
+      if (!Array.isArray(p) || p.length !== 2) continue;
 
-    const response = await fetch("https://api.openrouteservice.org/nearest", {
-      method: "POST",
-      headers: {
-        "Authorization": ORS_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ coordinates: coords })
-    });
+      const response = await fetch("https://api.openrouteservice.org/nearest", {
+        method: "POST",
+        headers: {
+          "Authorization": ORS_API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ coordinates: [p] }) // send one point at a time
+      });
 
-    const text = await response.text(); // read as text first
-    let data;
-    try {
-      data = JSON.parse(text); // parse JSON safely
-    } catch {
-      console.error("ORS nearest returned non-JSON:", text);
-      return res.status(502).json({ error: "ORS nearest returned invalid response" });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } 
+      catch { 
+        console.error("Invalid ORS response:", text);
+        continue; 
+      }
+
+      if (data.features?.[0]?.geometry?.coordinates) {
+        snappedCoordinates.push(data.features[0].geometry.coordinates);
+      }
     }
 
-    if (data.error) return res.status(400).json({ error: data.error });
-
-    const snappedCoords = data.features.map(f => f.geometry.coordinates);
-    res.json({ snappedCoordinates: snappedCoords });
+    if (!snappedCoordinates.length) return res.status(400).json({ error: "No points could be snapped" });
+    res.json({ snappedCoordinates });
 
   } catch (err) {
     console.error("ORS nearest error:", err);
     res.status(500).json({ error: "ORS nearest internal error" });
   }
 });
+
 
 
 
