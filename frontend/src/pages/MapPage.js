@@ -57,24 +57,50 @@ function AnimatedMarker({ path, speed = 50 }) {
 
 // Fetch route via ORS proxy
 async function fetchORSRoute(points) {
-  if (!points || points.length < 2) return [];
-  // ORS expects [[lng, lat], [lng, lat], ...]
-  const coords = points.map(p => [p[1], p[0]]);
+  if (!points || points.length < 2) {
+    console.warn("fetchORSRoute: Il faut au moins 2 points");
+    return [];
+  }
+
+  // Vérifie que chaque point a exactement 2 valeurs numériques
+  const coords = points.map(p => {
+    if (!Array.isArray(p) || p.length !== 2) {
+      throw new Error(`Point invalide: ${JSON.stringify(p)}`);
+    }
+    const [lat, lng] = p.map(Number);
+    if (isNaN(lat) || isNaN(lng)) {
+      throw new Error(`Point contient des valeurs non numériques: ${JSON.stringify(p)}`);
+    }
+    return [lng, lat]; // ORS attend [lng, lat]
+  });
+
   try {
     const res = await fetch(`${API_URL}/ors-route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: coords })
+      body: JSON.stringify({ coordinates: coords }),
     });
+
+    if (!res.ok) {
+      console.error("ORS fetch route HTTP error", res.status, await res.text());
+      return [];
+    }
+
     const data = await res.json();
-    if (data.features && data.features[0].geometry.coordinates) {
+
+    if (data.features?.[0]?.geometry?.coordinates) {
+      // Convertit de [lng, lat] en [lat, lng] pour l'affichage local
       return data.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+    } else {
+      console.warn("ORS fetch route: pas de coordonnées renvoyées");
+      return [];
     }
   } catch (err) {
     console.error("ORS fetch route error", err);
+    return [];
   }
-  return [];
 }
+
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
