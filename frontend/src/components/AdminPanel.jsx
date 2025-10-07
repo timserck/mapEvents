@@ -131,4 +131,3 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
     </div>
   );
 }
-Ò
