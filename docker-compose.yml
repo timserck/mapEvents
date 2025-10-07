@@ -26,7 +26,6 @@ services:
       DB_PORT: 5432
       DB_NAME: eventsdb
       JWT_SECRET: ${JWT_SECRET}
-      GH_API_KEY: ${GH_API_KEY}
     ports:
       - "4000:4000"
     depends_on:

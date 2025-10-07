@@ -9,7 +9,6 @@ const cors = require("cors");
 const fetch = require("node-fetch");
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
-const GH_API_KEY = process.env.GH_API_KEY;
 
 app.use(bodyParser.json());
 
