@@ -5,13 +5,13 @@ import "leaflet/dist/leaflet.css";
 // 🧠 Dictionnaire interne pour stocker les couleurs aléatoires générées
 const typeColorMap = {};
 
-// 🎨 Fonction pour générer une couleur aléatoire vive
+// 🎨 Générer une couleur aléatoire vive
 function getRandomColor() {
   const hue = Math.floor(Math.random() * 360);
   return `hsl(${hue}, 80%, 55%)`;
 }
 
-// 🎨 Fonction qui renvoie la couleur d’un type (génère si pas encore connue)
+// 🎨 Obtenir la couleur pour un type (ou générer si inconnue)
 export function getTypeColor(type = "default") {
   const key = type?.toLowerCase() || "default";
   if (!typeColorMap[key]) {
@@ -20,8 +20,11 @@ export function getTypeColor(type = "default") {
   return typeColorMap[key];
 }
 
-// 🧩 Fonction pour créer un marker numéroté et coloré selon le type
+// 🧩 Créer un marker numéroté coloré selon le type
 export function createNumberedIcon(number, type = "default") {
+  // Si type est "hotel", utiliser l'icône CDN
+  if (type.toLowerCase() === "hotel") return hotelIcon;
+
   const color = getTypeColor(type);
 
   return L.divIcon({
@@ -56,7 +59,15 @@ export const myPositionIcon = L.icon({
   iconAnchor: [16, 32],
 });
 
-// 💡 Optionnel : exporter le mapping pour le réutiliser ailleurs (ex: AdminPanel)
+// 🏨 Icône hotel depuis CDN
+export const hotelIcon = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/139/139899.png",
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -28],
+});
+
+// 💡 Exporter le mapping pour réutilisation
 export function getAllTypeColors() {
   return { ...typeColorMap };
 }
