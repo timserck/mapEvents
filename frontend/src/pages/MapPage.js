@@ -18,7 +18,7 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Interpolation between two points (for animation)
+// Interpolation for animation
 function interpolatePoints(p1, p2, steps) {
   const points = [];
   const [lat1, lng1] = p1;
@@ -40,7 +40,7 @@ function smoothPath(path, step = 5) {
   return smoothed;
 }
 
-// Animated marker (for movement)
+// Animated marker
 function AnimatedMarker({ path, speed = 50 }) {
   const [index, setIndex] = useState(0);
   const smoothedPath = smoothPath(path, 5);
@@ -66,14 +66,12 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// 🚶‍♀️ Fetch walking route via GraphHopper (multi-point support)
+// GraphHopper route fetch (segment-by-segment)
 async function fetchGraphHopperRoute(points) {
   if (!points || points.length < 2) return [];
-
   const allCoords = [];
   const cacheKeyBase = "gh_segment_";
 
-  // Helper: request route for a small segment (2 points)
   const requestRoute = async (segment) => {
     const key = cacheKeyBase + segment.map(p => p.join(",")).join("_");
     const cached = getCache(key);
@@ -85,10 +83,8 @@ async function fetchGraphHopperRoute(points) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ coordinates: segment, profile: "foot" })
       });
-
       const data = await res.json();
       let coords = [];
-
       if (data.paths?.[0]?.points?.coordinates) {
         coords = data.paths[0].points.coordinates.map(([lon, lat]) => [lat, lon]);
       } else if (data.points?.coordinates) {
@@ -98,7 +94,6 @@ async function fetchGraphHopperRoute(points) {
       } else {
         console.warn("GraphHopper subroute missing coordinates:", data);
       }
-
       if (coords.length) setCache(key, coords, CACHE_TTL);
       return coords;
     } catch (err) {
@@ -107,13 +102,11 @@ async function fetchGraphHopperRoute(points) {
     }
   };
 
-  // Sequentially link all event pairs
   for (let i = 0; i < points.length - 1; i++) {
     const segment = [points[i], points[i + 1]];
     const routePart = await requestRoute(segment);
-
     if (routePart.length > 0) {
-      if (allCoords.length > 0) routePart.shift(); // remove duplicate overlap
+      if (allCoords.length > 0) routePart.shift(); // avoid duplicate
       allCoords.push(...routePart);
     }
   }
@@ -129,15 +122,16 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
-  const [center, setCenter] = useState([48.8566, 2.3522]); // Paris default
+  const [center, setCenter] = useState([48.8566, 2.3522]);
   const [showRoutes, setShowRoutes] = useState(true);
   const [ghRoute, setGhRoute] = useState([]);
+  const [animatedRoute, setAnimatedRoute] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // ---- Fetch events ----
+  // Fetch events
   const fetchEvents = async (newEvent) => {
     if (newEvent) {
       setEvents(prev => [newEvent, ...prev]);
@@ -154,7 +148,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // ---- Fetch images ----
+  // Fetch images
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -176,7 +170,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => { fetchEvents(); }, []);
   useEffect(() => { if (events.length > 0) fetchImagesForEvents(events); }, [events]);
 
-  // ---- Track map movement ----
+  // Track map movements
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -185,7 +179,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // ---- Filters ----
+  // Filters
   const filteredEvents = events.filter(
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
@@ -193,10 +187,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // ---- Fetch route (debounced) ----
+  // Fetch route (debounced)
   useEffect(() => {
     if (filteredEvents.length === 0) {
       setGhRoute([]);
+      setAnimatedRoute([]);
       return;
     }
 
@@ -205,12 +200,31 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setLoading(true);
       const route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
       setGhRoute(route);
+      setAnimatedRoute([]); // reset for animation
       setLoading(false);
     }, 1000);
 
     fetchRouteDebounced(points);
     return () => fetchRouteDebounced.cancel?.();
   }, [filteredEvents, showRoutes]);
+
+  // Animate route step by step
+  useEffect(() => {
+    if (!ghRoute || ghRoute.length === 0) return;
+
+    let idx = 0;
+    setAnimatedRoute([]);
+    const interval = setInterval(() => {
+      idx++;
+      if (idx > ghRoute.length) {
+        clearInterval(interval);
+        return;
+      }
+      setAnimatedRoute(ghRoute.slice(0, idx));
+    }, 50); // 50ms per step
+
+    return () => clearInterval(interval);
+  }, [ghRoute]);
 
   return (
     <div className="flex h-screen">
@@ -233,7 +247,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés</label>
         </div>
 
-        {/* 🌍 MAP */}
+        {/* MAP */}
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -253,7 +267,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && ghRoute.length > 1 && <Polyline positions={ghRoute} color="blue" weight={4} opacity={0.6} dashArray="8,8" />}
+          {showRoutes && animatedRoute.length > 1 && <Polyline positions={animatedRoute} color="blue" weight={4} opacity={0.6} dashArray="8,8" />}
           {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
           {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement du tracé...</div>}
         </MapContainer>
