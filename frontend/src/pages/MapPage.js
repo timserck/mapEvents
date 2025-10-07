@@ -29,32 +29,48 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// 🚶‍♀️ Fetch walking route via GraphHopper
+// 🚶‍♀️ Fetch walking route via GraphHopper (supports many points)
 async function fetchGraphHopperRoute(points) {
   if (!points || points.length < 2) return [];
 
-  try {
-    const res = await fetch(`${API_URL}/gh-route`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ coordinates: points, profile: "foot" })
-    });
-    const data = await res.json();
+  const allCoords = [];
 
-    if (data.points && data.points.coordinates) {
-      return data.points.coordinates.map(([lon, lat]) => [lat, lon]);
-    } else if (data.coordinates) {
-      // Some GraphHopper setups return this format
-      return data.coordinates.map(([lon, lat]) => [lat, lon]);
-    } else {
-      console.warn("GraphHopper: no route found", data);
+  // Helper to request route for 2–5 points max
+  const requestRoute = async (segment) => {
+    try {
+      const res = await fetch(`${API_URL}/gh-route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coordinates: segment, profile: "foot" })
+      });
+      const data = await res.json();
+      if (data.points && data.points.coordinates) {
+        return data.points.coordinates.map(([lon, lat]) => [lat, lon]);
+      } else if (data.coordinates) {
+        return data.coordinates.map(([lon, lat]) => [lat, lon]);
+      } else {
+        console.warn("GraphHopper subroute error:", data);
+        return [];
+      }
+    } catch (err) {
+      console.error("GraphHopper fetch error:", err);
       return [];
     }
-  } catch (err) {
-    console.error("GraphHopper route error:", err);
-    return [];
+  };
+
+  // Split into overlapping pairs to connect sequentially
+  for (let i = 0; i < points.length - 1; i++) {
+    const segment = [points[i], points[i + 1]];
+    const routePart = await requestRoute(segment);
+    if (routePart.length > 0) {
+      if (allCoords.length > 0) routePart.shift(); // avoid duplicate connecting point
+      allCoords.push(...routePart);
+    }
   }
+
+  return allCoords;
 }
+
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
