@@ -66,10 +66,34 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// 🚶‍♀️ GraphHopper batched route fetch
-async function fetchGraphHopperRouteBatched(points, maxPointsPerRequest = 5, delayMs = 5000) {
+// Snap a point to the nearest road using GraphHopper Nearest API
+async function snapPoint([lat, lon]) {
+  try {
+    const res = await fetch(`${API_URL}/gh-nearest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ point: [lat, lon] })
+    });
+    const data = await res.json();
+    if (data && data.snapped_point) return data.snapped_point;
+  } catch (err) {
+    console.error("GraphHopper nearest error:", err);
+  }
+  return [lat, lon]; // fallback if snap fails
+}
+
+// GraphHopper route fetch (segment-by-segment)
+async function fetchGraphHopperRoute(points) {
   if (!points || points.length < 2) return [];
   const allCoords = [];
+
+  // Snap points first
+  const snappedPoints = [];
+  for (let p of points) {
+    const snapped = await snapPoint(p);
+    snappedPoints.push(snapped);
+  }
+
   const cacheKeyBase = "gh_segment_";
 
   const requestRoute = async (segment) => {
@@ -102,16 +126,13 @@ async function fetchGraphHopperRouteBatched(points, maxPointsPerRequest = 5, del
     }
   };
 
-  // Split points into overlapping batches
-  for (let i = 0; i < points.length - 1; i += maxPointsPerRequest - 1) {
-    const batch = points.slice(i, i + maxPointsPerRequest);
-    if (batch.length < 2) continue;
-    const routePart = await requestRoute(batch);
+  for (let i = 0; i < snappedPoints.length - 1; i++) {
+    const segment = [snappedPoints[i], snappedPoints[i + 1]];
+    const routePart = await requestRoute(segment);
     if (routePart.length > 0) {
-      if (allCoords.length > 0) routePart.shift(); // remove overlap
+      if (allCoords.length > 0) routePart.shift(); // avoid duplicate
       allCoords.push(...routePart);
     }
-    await new Promise(res => setTimeout(res, delayMs));
   }
 
   return allCoords;
@@ -201,9 +222,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     const points = filteredEvents.map(e => [e.latitude, e.longitude]);
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const route = showRoutes ? await fetchGraphHopperRouteBatched(pts) : [];
+      const route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
       setGhRoute(route);
-      setAnimatedRoute([]);
+      setAnimatedRoute([]); // reset for animation
       setLoading(false);
     }, 1000);
 
