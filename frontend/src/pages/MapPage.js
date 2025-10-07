@@ -59,7 +59,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         try {
           const res = await fetch(`https://source.unsplash.com/400x300/?${encodeURIComponent(e.title)}`);
           if (res.ok && res.url) img = res.url;
-        } catch {}
+        } catch { }
       }
       setCache(cacheKey, img, CACHE_TTL);
       updated[e.id] = img;
@@ -158,6 +158,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                     alt={e.title}
                     style={{ width: "100%", borderRadius: "6px", marginTop: "4px" }}
                   />
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">🚶 Itinéraire</a>
+
                 </Popup>
               </Marker>
             ))}
