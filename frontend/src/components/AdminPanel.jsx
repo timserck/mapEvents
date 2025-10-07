@@ -9,6 +9,15 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
   const [events, setEvents] = useState([]);
   const [editingEvent, setEditingEvent] = useState(null);
 
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("");
+  const [date, setDate] = useState("");
+  const [description, setDescription] = useState("");
+  const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+
+  // Fetch events
   const fetchAllEvents = async () => {
     const res = await fetch(`${API_URL}/events`);
     const data = await res.json();
@@ -18,17 +27,80 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
 
   useEffect(() => { fetchAllEvents(); }, [refreshEvents]);
 
-  const startEditing = (event) => { setEditingEvent(event); /* fill form if needed */ };
-  const handleDelete = async (id) => { await fetch(`${API_URL}/events/${id}`, { method:"DELETE", headers:{Authorization:`Bearer ${token}`} }); fetchAllEvents(); refreshEvents(); };
-  const deleteAllEvents = async () => { if(!confirm("⚠️ Supprimer tous les événements ?")) return; await fetch(`${API_URL}/events`,{method:"DELETE",headers:{Authorization:`Bearer ${token}`}}); fetchAllEvents(); refreshEvents(); };
+  // Start editing
+  const startEditing = (e) => {
+    setEditingEvent(e);
+    setTitle(e.title);
+    setType(e.type);
+    setDate(e.date ? e.date.split("T")[0] : "");
+    setDescription(e.description);
+    setAddress(e.address);
+    setLatitude(e.latitude);
+    setLongitude(e.longitude);
+  };
 
+  const resetForm = () => {
+    setEditingEvent(null);
+    setTitle(""); setType(""); setDate(""); setDescription(""); setAddress(""); setLatitude(null); setLongitude(null);
+  };
+
+  // Submit form
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    let finalLat = latitude;
+    let finalLon = longitude;
+
+    if ((!finalLat || !finalLon) || (editingEvent && editingEvent.address !== address)) {
+      try {
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
+        const data = await res.json();
+        if (data.features && data.features.length > 0) {
+          finalLat = data.features[0].geometry.coordinates[1];
+          finalLon = data.features[0].geometry.coordinates[0];
+        }
+      } catch (err) { console.error("Géocodage:", err); }
+    }
+
+    const url = editingEvent ? `${API_URL}/events/${editingEvent.id}` : `${API_URL}/events`;
+    const method = editingEvent ? "PUT" : "POST";
+
+    await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization:`Bearer ${token}` },
+      body: JSON.stringify({ title, type, date, description, address, latitude: finalLat, longitude: finalLon })
+    });
+
+    resetForm();
+    fetchAllEvents();
+    refreshEvents();
+  };
+
+  // Delete
+  const handleDelete = async (id) => {
+    await fetch(`${API_URL}/events/${id}`, { method:"DELETE", headers:{Authorization:`Bearer ${token}`} });
+    fetchAllEvents();
+    refreshEvents();
+  };
+
+  const deleteAllEvents = async () => {
+    if (!confirm("⚠️ Supprimer tous les événements ?")) return;
+    await fetch(`${API_URL}/events`, { method:"DELETE", headers:{Authorization:`Bearer ${token}`} });
+    fetchAllEvents();
+    refreshEvents();
+  };
+
+  // Drag & drop reorder
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
     const items = Array.from(events);
     const [moved] = items.splice(result.source.index,1);
     items.splice(result.destination.index,0,moved);
     setEvents(items);
-    await fetch(`${API_URL}/events/reorder`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({orderedIds:items.map(e=>e.id)})});
+    await fetch(`${API_URL}/events/reorder`,{
+      method:"PATCH",
+      headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+      body: JSON.stringify({ orderedIds:items.map(e=>e.id) })
+    });
     refreshEvents();
   };
 
@@ -36,11 +108,28 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
     <div className="w-full h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
+      {/* Formulaire d'édition / création */}
+      <form onSubmit={handleSubmit} className="mb-4 p-2 border rounded bg-white">
+        <h3 className="font-semibold mb-2">{editingEvent ? "Éditer l'événement" : "Ajouter un événement"}</h3>
+        <div className="flex flex-col md:flex-row gap-2">
+          <input type="text" placeholder="Titre" value={title} onChange={e=>setTitle(e.target.value)} className="border p-2 flex-1"/>
+          <input type="text" placeholder="Type" value={type} onChange={e=>setType(e.target.value)} className="border p-2 flex-1"/>
+          <input type="date" placeholder="Date" value={date} onChange={e=>setDate(e.target.value)} className="border p-2 flex-1"/>
+        </div>
+        <input type="text" placeholder="Adresse" value={address} onChange={e=>setAddress(e.target.value)} className="border p-2 mt-2 w-full"/>
+        <textarea placeholder="Description" value={description} onChange={e=>setDescription(e.target.value)} className="border p-2 mt-2 w-full"/>
+        <div className="flex gap-2 mt-2">
+          <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">{editingEvent ? "Mettre à jour" : "Ajouter"}</button>
+          {editingEvent && <button type="button" onClick={resetForm} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Annuler</button>}
+        </div>
+      </form>
+
+      {/* Events Table */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
-      <div className="overflow-x-auto min-h-[600px]">
+      <div className="overflow-x-auto min-h-[400px]">
         <DragDropContext onDragEnd={handleDragEnd}>
           <Droppable droppableId="events">
-            {(provided) => (
+            {(provided)=>(
               <table className="min-w-[600px] w-full border mt-2 text-sm" {...provided.droppableProps} ref={provided.innerRef}>
                 <thead>
                   <tr className="bg-gray-200">
