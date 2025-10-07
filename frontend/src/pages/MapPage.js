@@ -9,7 +9,7 @@ import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 
-// 🔁 Recenter map when center changes
+// Recenter map when center changes
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -66,7 +66,7 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// Snap a point to the nearest road using GraphHopper Nearest API
+// Snap a point to nearest road using GraphHopper Nearest API
 async function snapPoint([lat, lon]) {
   try {
     const res = await fetch(`${API_URL}/gh-nearest`, {
@@ -79,12 +79,13 @@ async function snapPoint([lat, lon]) {
   } catch (err) {
     console.error("GraphHopper nearest error:", err);
   }
-  return [lat, lon]; // fallback if snap fails
+  return [lat, lon]; // fallback
 }
 
-// GraphHopper route fetch (resilient)
+// GraphHopper route fetch (segment-by-segment with resilient fallback)
 async function fetchGraphHopperRoute(points) {
   if (!points || points.length < 2) return [];
+  const allCoords = [];
 
   // Snap points first
   const snappedPoints = [];
@@ -93,7 +94,6 @@ async function fetchGraphHopperRoute(points) {
     snappedPoints.push(snapped);
   }
 
-  const allCoords = [];
   const cacheKeyBase = "gh_segment_";
 
   const requestRoute = async (segment) => {
@@ -109,23 +109,17 @@ async function fetchGraphHopperRoute(points) {
       });
       const data = await res.json();
 
-      let coords = [];
-      if (data.paths?.[0]?.points?.coordinates) {
-        coords = data.paths[0].points.coordinates.map(([lon, lat]) => [lat, lon]);
-      } else if (data.points?.coordinates) {
-        coords = data.points.coordinates.map(([lon, lat]) => [lat, lon]);
-      } else if (data.coordinates) {
-        coords = data.coordinates.map(([lon, lat]) => [lat, lon]);
-      } else {
-        console.warn("GraphHopper subroute missing coordinates:", data);
-        // fallback to straight line segment
-        coords = [segment[0], segment[1]];
+      if (!data || !data.paths?.[0]?.points?.coordinates) {
+        console.warn(`GraphHopper failed for segment ${segment.map(p => p.join(",")).join(" -> ")}, using fallback line.`);
+        return [segment[0], segment[1]]; // fallback line
       }
 
+      const coords = data.paths[0].points.coordinates.map(([lon, lat]) => [lat, lon]);
       if (coords.length) setCache(key, coords, CACHE_TTL);
       return coords;
+
     } catch (err) {
-      console.error("GraphHopper fetch error, fallback to straight line:", err);
+      console.error("GraphHopper fetch error, using fallback line:", err);
       return [segment[0], segment[1]]; // fallback
     }
   };
@@ -215,7 +209,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // Fetch route (debounced 5s)
+  // Fetch route (debounced)
   useEffect(() => {
     if (filteredEvents.length === 0) {
       setGhRoute([]);
@@ -230,7 +224,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       setGhRoute(route);
       setAnimatedRoute([]); // reset for animation
       setLoading(false);
-    }, 5000); // 5s debounce
+    }, 5000); // 5-second debounce
 
     fetchRouteDebounced(points);
     return () => fetchRouteDebounced.cancel?.();
@@ -317,4 +311,3 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     </div>
   );
 }
-
