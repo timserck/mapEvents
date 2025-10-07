@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
-import { createNumberedIcon, myPositionIcon, hotelIcon } from "../leafletSetup";
+import { createNumberedIcon, myPositionIcon, hotelIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel";
 import { API_URL } from "../config";
 import LazyImage from "../components/LazyImage";
@@ -119,7 +119,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
-              <Marker key={e.id} position={[e.latitude, e.longitude]} icon={createNumberedIcon(index + 1, e.type)}>
+              <Marker
+                key={e.id}
+                position={[e.latitude, e.longitude]}
+                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(index + 1, e.type)}
+              >
                 <Popup minWidth={250}>
                   <strong>{index + 1}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
