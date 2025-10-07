@@ -174,5 +174,25 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
   } catch(err){ console.error(err); res.status(500).json({error:"DB bulk insert error"});}
 });
 
+
+app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req,res)=>{
+  const { orderedIds } = req.body;
+  if(!Array.isArray(orderedIds)||!orderedIds.length) return res.status(400).json({error:"orderedIds array required"});  try {
+    // Utilisation d'une transaction pour mettre à jour toutes les positions
+    await pool.query("BEGIN");
+    for (let i = 0; i < orderedIds.length; i++) {
+      const id = orderedIds[i];
+      const position = i + 1; // position commence à 1
+      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [position, id]);
+    }
+    await pool.query("COMMIT");
+    res.json({ success: true, message: "Events reordered successfully" });
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    console.error("Reorder error:", err);
+    res.status(500).json({ error: "DB reorder error" });
+  }
+});
+
 // --- Start Server ---
 app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000"));
