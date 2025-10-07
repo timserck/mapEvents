@@ -67,7 +67,7 @@ function debounce(fn, delay) {
 }
 
 // 🚶‍♀️ GraphHopper batched route fetch
-async function fetchGraphHopperRouteBatched(points, maxPointsPerRequest = 5, delayMs = 1200) {
+async function fetchGraphHopperRouteBatched(points, maxPointsPerRequest = 5, delayMs = 5000) {
   if (!points || points.length < 2) return [];
   const allCoords = [];
   const cacheKeyBase = "gh_segment_";
