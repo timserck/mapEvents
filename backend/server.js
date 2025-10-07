@@ -9,7 +9,7 @@ const cors = require("cors");
 const fetch = require("node-fetch");
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecret";
-const ORS_API_KEY = process.env.ORS_API_KEY;
+const GH_API_KEY = process.env.GH_API_KEY;
 
 app.use(bodyParser.json());
 
@@ -175,52 +175,51 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
   } catch(err){ console.error(err); res.status(500).json({error:"DB bulk insert error"});}
 });
 
-// --- ORS Routes ---
-app.post("/ors-route", async (req,res)=>{
-  const { coordinates, profile="foot-walking" }=req.body;
-  if(!coordinates||coordinates.length<2) return res.status(400).json({ error:"start et end requis" });
+// Route endpoint (multi-point)
+app.post("/gh-route", async (req, res) => {
+  const { coordinates, profile = "foot" } = req.body;
+
+  if (!coordinates || coordinates.length < 2)
+    return res.status(400).json({ error: "At least 2 coordinates required" });
+
   try {
-    // Snap points
-    const nearestRes = await fetch("https://api.openrouteservice.org/nearest",{
-      method:"POST",
-      headers:{ "Authorization": ORS_API_KEY, "Content-Type":"application/json" },
-      body:JSON.stringify({ coordinates: coordinates.map(c=>[c[1],c[0]]) })
-    });
-    const nearestData = await nearestRes.json();
-    if(!nearestData?.features || nearestData.features.length<2) return res.status(400).json({ error:"No points could be snapped" });
-    const snapped=nearestData.features.map(f=>f.geometry.coordinates);
-    // Directions
-    const routeRes = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}`,{
-      method:"POST",
-      headers:{ "Authorization": ORS_API_KEY, "Content-Type":"application/json" },
-      body:JSON.stringify({ coordinates: snapped })
-    });
-    const routeData = await routeRes.json();
-    res.json(routeData);
-  } catch(err){ console.error(err); res.status(500).json({error:"ORS routing error"});}
+    // Convert to lat,lon format for GH
+    const points = coordinates.map(c => `${c[1]},${c[0]}`).join("&point=");
+
+    const url = `https://graphhopper.com/api/1/route?point=${points}&profile=${profile}&locale=fr&instructions=true&points_encoded=false&key=${GH_API_KEY}`;
+
+    const ghRes = await fetch(url);
+    const data = await ghRes.json();
+
+    if (!data.paths || !data.paths.length) {
+      return res.status(400).json({ error: "No route found", data });
+    }
+
+    res.json(data.paths[0]); // Return the first route
+  } catch (err) {
+    console.error("GraphHopper route error:", err);
+    res.status(500).json({ error: "GraphHopper route error" });
+  }
 });
 
-app.post("/ors-nearest", async (req,res)=>{
-  const { coordinates }=req.body;
-  if(!coordinates?.length) return res.status(400).json({ error:"At least 1 point required" });
+// Optional: nearest point (for snapping)
+app.post("/gh-nearest", async (req, res) => {
+  const { coordinates } = req.body;
+  if (!coordinates || coordinates.length === 0)
+    return res.status(400).json({ error: "Coordinates required" });
+
   try {
-    const snapped=[];
-    for(let p of coordinates){
-      if(!Array.isArray(p)||p.length!==2) continue;
-      const response=await fetch("https://api.openrouteservice.org/nearest",{
-        method:"POST",
-        headers:{ "Authorization": ORS_API_KEY, "Content-Type":"application/json" },
-        body:JSON.stringify({ coordinates:[ [p[1],p[0]] ] }) // [lng,lat]
-      });
-      const text=await response.text();
-      let data;
-      try{ data=JSON.parse(text); } catch{ continue; }
-      if(data.features?.[0]?.geometry?.coordinates) snapped.push(data.features[0].geometry.coordinates);
-    }
-    if(!snapped.length) return res.status(400).json({ error:"No points could be snapped" });
-    res.json({ snappedCoordinates: snapped });
-  } catch(err){ console.error(err); res.status(500).json({ error:"ORS nearest internal error" }); }
+    const [lon, lat] = coordinates[0];
+    const url = `https://graphhopper.com/api/1/geocode?reverse=true&point=${lat},${lon}&key=${GH_API_KEY}`;
+    const ghRes = await fetch(url);
+    const data = await ghRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error("GraphHopper nearest error:", err);
+    res.status(500).json({ error: "GraphHopper nearest error" });
+  }
 });
+
 
 // --- Start Server ---
 app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000"));
