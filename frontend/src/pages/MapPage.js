@@ -66,8 +66,8 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// GraphHopper route fetch (segment-by-segment)
-async function fetchGraphHopperRoute(points) {
+// 🚶‍♀️ GraphHopper batched route fetch
+async function fetchGraphHopperRouteBatched(points, maxPointsPerRequest = 5, delayMs = 1200) {
   if (!points || points.length < 2) return [];
   const allCoords = [];
   const cacheKeyBase = "gh_segment_";
@@ -102,13 +102,16 @@ async function fetchGraphHopperRoute(points) {
     }
   };
 
-  for (let i = 0; i < points.length - 1; i++) {
-    const segment = [points[i], points[i + 1]];
-    const routePart = await requestRoute(segment);
+  // Split points into overlapping batches
+  for (let i = 0; i < points.length - 1; i += maxPointsPerRequest - 1) {
+    const batch = points.slice(i, i + maxPointsPerRequest);
+    if (batch.length < 2) continue;
+    const routePart = await requestRoute(batch);
     if (routePart.length > 0) {
-      if (allCoords.length > 0) routePart.shift(); // avoid duplicate
+      if (allCoords.length > 0) routePart.shift(); // remove overlap
       allCoords.push(...routePart);
     }
+    await new Promise(res => setTimeout(res, delayMs));
   }
 
   return allCoords;
@@ -198,9 +201,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     const points = filteredEvents.map(e => [e.latitude, e.longitude]);
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
+      const route = showRoutes ? await fetchGraphHopperRouteBatched(pts) : [];
       setGhRoute(route);
-      setAnimatedRoute([]); // reset for animation
+      setAnimatedRoute([]);
       setLoading(false);
     }, 1000);
 
@@ -221,7 +224,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         return;
       }
       setAnimatedRoute(ghRoute.slice(0, idx));
-    }, 50); // 50ms per step
+    }, 50);
 
     return () => clearInterval(interval);
   }, [ghRoute]);
