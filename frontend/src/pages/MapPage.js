@@ -66,8 +66,8 @@ function debounce(fn, delay) {
   return debounced;
 }
 
-// Debounced snapPoint helper (500ms per point)
-const snapPointDebounced = debounce(async ([lat, lon]) => {
+// Snap a point to nearest road using GraphHopper Nearest API
+async function snapPoint([lat, lon]) {
   try {
     const res = await fetch(`${API_URL}/gh-nearest`, {
       method: "POST",
@@ -80,24 +80,24 @@ const snapPointDebounced = debounce(async ([lat, lon]) => {
     console.error("GraphHopper nearest error:", err);
   }
   return [lat, lon]; // fallback
-}, 500);
+}
 
 // GraphHopper route fetch (segment-by-segment)
 async function fetchGraphHopperRoute(points) {
   if (!points || points.length < 2) return [];
   const allCoords = [];
 
-  // Snap points with debounced API calls
+  // Snap points first
   const snappedPoints = [];
   for (let p of points) {
-    const snapped = await snapPointDebounced(p);
+    const snapped = await snapPoint(p);
     snappedPoints.push(snapped);
   }
 
   const cacheKeyBase = "gh_segment_";
 
   const requestRoute = async (segment) => {
-    const key = cacheKeyBase + segment.map(p => p.join(",")).join("_");
+    const key = cacheKeyBase + segment.map(p => p?.join(",")).join("_"); // safe join
     const cached = getCache(key);
     if (cached) return cached;
 
@@ -130,7 +130,7 @@ async function fetchGraphHopperRoute(points) {
     const segment = [snappedPoints[i], snappedPoints[i + 1]];
     const routePart = await requestRoute(segment);
     if (routePart.length > 0) {
-      if (allCoords.length > 0) routePart.shift(); // avoid duplicate
+      if (allCoords.length > 0) routePart.shift();
       allCoords.push(...routePart);
     }
   }
@@ -211,7 +211,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // Fetch route (debounced 5000ms)
+  // Fetch route (debounced, 5000ms)
   useEffect(() => {
     if (filteredEvents.length === 0) {
       setGhRoute([]);
@@ -222,11 +222,21 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     const points = filteredEvents.map(e => [e.latitude, e.longitude]);
     const fetchRouteDebounced = debounce(async (pts) => {
       setLoading(true);
-      const route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
+      let route = [];
+      try {
+        route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
+      } catch (err) {
+        console.error("GraphHopper route fetch failed:", err);
+      }
+
+      if (route.length === 0 && pts.length > 1) {
+        route = pts; // fallback straight line
+      }
+
       setGhRoute(route);
-      setAnimatedRoute([]); // reset for animation
+      setAnimatedRoute([]);
       setLoading(false);
-    }, 5000); // 5 seconds delay
+    }, 5000);
 
     fetchRouteDebounced(points);
     return () => fetchRouteDebounced.cancel?.();
@@ -235,7 +245,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   // Animate route step by step
   useEffect(() => {
     if (!ghRoute || ghRoute.length === 0) return;
-
     let idx = 0;
     setAnimatedRoute([]);
     const interval = setInterval(() => {
@@ -246,7 +255,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       }
       setAnimatedRoute(ghRoute.slice(0, idx));
     }, 50);
-
     return () => clearInterval(interval);
   }, [ghRoute]);
 
