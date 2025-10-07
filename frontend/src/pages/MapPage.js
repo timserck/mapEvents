@@ -79,11 +79,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // Go To event
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
-    const map = mapRef.current;
-    map.setView([ev.latitude, ev.longitude], map.getZoom(), { animate: true });
+    const map = mapRef.current; 
+    // Accéder à l’objet Leaflet réel via .leafletElement (si react-leaflet v2) 
+    // ou via mapRef.current.getMap() (si v3)
+    const leafletMap = map?.leafletElement || map?.getMap?.();
+    if (!leafletMap) return;
+    leafletMap.setView([ev.latitude, ev.longitude], leafletMap.getZoom(), { animate: true });
   };
 
   return (
@@ -149,7 +152,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent} />
+              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent}  mapRef={mapRef} />
             </div>
           </div>
         </div>
