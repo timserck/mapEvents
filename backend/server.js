@@ -175,51 +175,5 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
   } catch(err){ console.error(err); res.status(500).json({error:"DB bulk insert error"});}
 });
 
-// Route endpoint (multi-point)
-app.post("/gh-route", async (req, res) => {
-  const { coordinates, profile = "foot" } = req.body;
-
-  if (!coordinates || coordinates.length < 2)
-    return res.status(400).json({ error: "At least 2 coordinates required" });
-
-  try {
-    // Convert to lat,lon format for GH
-    const points = coordinates.map(c => `${c[1]},${c[0]}`).join("&point=");
-
-    const url = `https://graphhopper.com/api/1/route?point=${points}&profile=${profile}&locale=fr&instructions=true&points_encoded=false&key=${GH_API_KEY}`;
-
-    const ghRes = await fetch(url);
-    const data = await ghRes.json();
-
-    if (!data.paths || !data.paths.length) {
-      return res.status(400).json({ error: "No route found", data });
-    }
-
-    res.json(data.paths[0]); // Return the first route
-  } catch (err) {
-    console.error("GraphHopper route error:", err);
-    res.status(500).json({ error: "GraphHopper route error" });
-  }
-});
-
-// Optional: nearest point (for snapping)
-app.post("/gh-nearest", async (req, res) => {
-  const { coordinates } = req.body;
-  if (!coordinates || coordinates.length === 0)
-    return res.status(400).json({ error: "Coordinates required" });
-
-  try {
-    const [lon, lat] = coordinates[0];
-    const url = `https://graphhopper.com/api/1/geocode?reverse=true&point=${lat},${lon}&key=${GH_API_KEY}`;
-    const ghRes = await fetch(url);
-    const data = await ghRes.json();
-    res.json(data);
-  } catch (err) {
-    console.error("GraphHopper nearest error:", err);
-    res.status(500).json({ error: "GraphHopper nearest error" });
-  }
-});
-
-
 // --- Start Server ---
 app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000"));

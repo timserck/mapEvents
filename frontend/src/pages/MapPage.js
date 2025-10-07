@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
 import { createNumberedIcon, myPositionIcon } from "../leaflet.js";
@@ -18,124 +18,6 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Interpolation for animation
-function interpolatePoints(p1, p2, steps) {
-  const points = [];
-  const [lat1, lng1] = p1;
-  const [lat2, lng2] = p2;
-  for (let i = 0; i <= steps; i++) {
-    points.push([lat1 + ((lat2 - lat1) * i) / steps, lng1 + ((lng2 - lng1) * i) / steps]);
-  }
-  return points;
-}
-
-// Smooth path for animation
-function smoothPath(path, step = 5) {
-  if (!path || path.length < 2) return path;
-  let smoothed = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    smoothed.push(...interpolatePoints(path[i], path[i + 1], step));
-  }
-  smoothed.push(path[path.length - 1]);
-  return smoothed;
-}
-
-// Animated marker
-function AnimatedMarker({ path, speed = 50 }) {
-  const [index, setIndex] = useState(0);
-  const smoothedPath = smoothPath(path, 5);
-
-  useEffect(() => {
-    if (!smoothedPath || smoothedPath.length < 2) return;
-    const interval = setInterval(() => setIndex(prev => (prev + 1 < smoothedPath.length ? prev + 1 : prev)), speed);
-    return () => clearInterval(interval);
-  }, [smoothedPath, speed]);
-
-  if (!smoothedPath || smoothedPath.length === 0) return null;
-  return <Marker position={smoothedPath[index]} icon={myPositionIcon} />;
-}
-
-// Debounce helper
-function debounce(fn, delay) {
-  let timer;
-  const debounced = (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-  debounced.cancel = () => clearTimeout(timer);
-  return debounced;
-}
-
-// Snap a point to nearest road using GraphHopper Nearest API
-async function snapPoint([lat, lon]) {
-  try {
-    const res = await fetch(`${API_URL}/gh-nearest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ point: [lat, lon] })
-    });
-    const data = await res.json();
-    if (data && data.snapped_point) return data.snapped_point;
-  } catch (err) {
-    console.error("GraphHopper nearest error:", err);
-  }
-  return [lat, lon]; // fallback
-}
-
-// GraphHopper route fetch (segment-by-segment with resilient fallback)
-async function fetchGraphHopperRoute(points) {
-  if (!points || points.length < 2) return [];
-  const allCoords = [];
-
-  // Snap points first
-  const snappedPoints = [];
-  for (let p of points) {
-    const snapped = await snapPoint(p);
-    snappedPoints.push(snapped);
-  }
-
-  const cacheKeyBase = "gh_segment_";
-
-  const requestRoute = async (segment) => {
-    const key = cacheKeyBase + segment.map(p => p.join(",")).join("_");
-    const cached = getCache(key);
-    if (cached) return cached;
-
-    try {
-      const res = await fetch(`${API_URL}/gh-route`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates: segment, profile: "foot" })
-      });
-      const data = await res.json();
-
-      if (!data || !data.paths?.[0]?.points?.coordinates) {
-        console.warn(`GraphHopper failed for segment ${segment.map(p => p.join(",")).join(" -> ")}, using fallback line.`);
-        return [segment[0], segment[1]]; // fallback line
-      }
-
-      const coords = data.paths[0].points.coordinates.map(([lon, lat]) => [lat, lon]);
-      if (coords.length) setCache(key, coords, CACHE_TTL);
-      return coords;
-
-    } catch (err) {
-      console.error("GraphHopper fetch error, using fallback line:", err);
-      return [segment[0], segment[1]]; // fallback
-    }
-  };
-
-  for (let i = 0; i < snappedPoints.length - 1; i++) {
-    const segment = [snappedPoints[i], snappedPoints[i + 1]];
-    const routePart = await requestRoute(segment);
-    if (routePart.length > 0) {
-      if (allCoords.length > 0) routePart.shift(); // avoid duplicate
-      allCoords.push(...routePart);
-    }
-  }
-
-  return allCoords;
-}
-
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [events, setEvents] = useState([]);
   const [eventImages, setEventImages] = useState({});
@@ -145,10 +27,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
-  const [showRoutes, setShowRoutes] = useState(true);
-  const [ghRoute, setGhRoute] = useState([]);
-  const [animatedRoute, setAnimatedRoute] = useState([]);
-  const [loading, setLoading] = useState(false);
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
@@ -209,45 +87,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
-  // Fetch route (debounced)
-  useEffect(() => {
-    if (filteredEvents.length === 0) {
-      setGhRoute([]);
-      setAnimatedRoute([]);
-      return;
-    }
-
-    const points = filteredEvents.map(e => [e.latitude, e.longitude]);
-    const fetchRouteDebounced = debounce(async (pts) => {
-      setLoading(true);
-      const route = showRoutes ? await fetchGraphHopperRoute(pts) : [];
-      setGhRoute(route);
-      setAnimatedRoute([]); // reset for animation
-      setLoading(false);
-    }, 5000); // 5-second debounce
-
-    fetchRouteDebounced(points);
-    return () => fetchRouteDebounced.cancel?.();
-  }, [filteredEvents, showRoutes]);
-
-  // Animate route step by step
-  useEffect(() => {
-    if (!ghRoute || ghRoute.length === 0) return;
-
-    let idx = 0;
-    setAnimatedRoute([]);
-    const interval = setInterval(() => {
-      idx++;
-      if (idx > ghRoute.length) {
-        clearInterval(interval);
-        return;
-      }
-      setAnimatedRoute(ghRoute.slice(0, idx));
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, [ghRoute]);
-
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
@@ -256,17 +95,23 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés</label>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
           </details>
         </div>
 
         <div className="hidden md:flex p-2 gap-2 bg-gray-100">
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}</select>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} />Afficher les tracés</label>
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
+            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+            {uniqueDates.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
         </div>
 
         {/* MAP */}
@@ -289,9 +134,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {showRoutes && animatedRoute.length > 1 && <Polyline positions={animatedRoute} color="blue" weight={4} opacity={0.6} dashArray="8,8" />}
           {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
-          {loading && <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/30 text-white font-semibold text-lg">Chargement du tracé...</div>}
         </MapContainer>
       </div>
 
