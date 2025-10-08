@@ -8,12 +8,69 @@ import { API_URL } from "../config";
 import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
+import L from "leaflet";
 
+// Component to update map center
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
     if (center && Array.isArray(center)) map.setView(center, map.getZoom(), { animate: true });
   }, [center, map]);
+  return null;
+}
+
+// Geolocation button component
+function GeolocateButton({ setUserPosition, setUserAddress }) {
+  const map = useMap();
+
+  const locateUser = () => {
+    if (!navigator.geolocation) {
+      alert("Votre navigateur ne supporte pas la géolocalisation");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserPosition([latitude, longitude]);
+        map.setView([latitude, longitude], 15, { animate: true });
+
+        // Reverse geocode to get address
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+          setUserAddress(data.display_name || null);
+        } catch {}
+      },
+      (err) => {
+        alert("Impossible de récupérer votre position : " + err.message);
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  useEffect(() => {
+    const controlDiv = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-custom");
+    controlDiv.style.backgroundColor = "white";
+    controlDiv.style.width = "34px";
+    controlDiv.style.height = "34px";
+    controlDiv.style.display = "flex";
+    controlDiv.style.alignItems = "center";
+    controlDiv.style.justifyContent = "center";
+    controlDiv.style.cursor = "pointer";
+    controlDiv.title = "📍 Aller à ma position";
+    controlDiv.innerText = "📍";
+
+    controlDiv.onclick = locateUser;
+
+    const customControl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd: () => controlDiv
+    });
+
+    map.addControl(new customControl());
+  }, [map]);
+
   return null;
 }
 
@@ -82,8 +139,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
     const map = mapRef.current; 
-    // Accéder à l’objet Leaflet réel via .leafletElement (si react-leaflet v2) 
-    // ou via mapRef.current.getMap() (si v3)
     const leafletMap = map?.leafletElement || map?.getMap?.();
     if (!leafletMap) return;
     leafletMap.setView([ev.latitude, ev.longitude], leafletMap.getZoom(), { animate: true });
@@ -119,6 +174,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         <MapContainer ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+          {/* Geolocation button */}
+          <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
