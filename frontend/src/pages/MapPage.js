@@ -10,7 +10,7 @@ import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
 
-// 📍 Map center updater
+// Map center updater
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -19,7 +19,7 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// 📍 Geolocation button
+// Geolocation button
 function GeolocateButton({ setUserPosition, setUserAddress }) {
   const map = useMap();
 
@@ -83,6 +83,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [eventImages, setEventImages] = useState({});
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
+  const [searchName, setSearchName] = useState("");
   const [userPosition, setUserPosition] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
@@ -91,7 +92,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // 📡 Fetch events
+  // Fetch events
   const fetchEvents = async () => {
     try {
       const res = await fetch(`${API_URL}/events`);
@@ -105,7 +106,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
   };
 
-  // 🖼️ Fetch images for events
+  // Fetch images
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -126,7 +127,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   useEffect(() => { fetchEvents(); }, []);
 
-  // 🧭 Track if user manually moved map
+  // Track if user manually moved map
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -135,15 +136,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // 🧭 Go to event marker
+  // Go to event marker
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
     mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
   };
 
-  // 🧰 Filtrage des événements avec formatage des dates
+  // Prepare filters
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
-
   const uniqueDates = [
     "all",
     ...Array.from(new Set(events.map(e => formatDate(e.date)))).sort(
@@ -151,17 +151,26 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     )
   ];
 
+  // Filtered events
   const filteredEvents = events.filter(
     e =>
       (filterType === "all" || e.type === filterType) &&
-      (filterDate === "all" || formatDate(e.date) === filterDate)
+      (filterDate === "all" || formatDate(e.date) === filterDate) &&
+      e.title.toLowerCase().includes(searchName.toLowerCase())
   );
 
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* 📅 Filtres mobile */}
-        <div className="p-2 bg-gray-100 md:hidden">
+        {/* Filters */}
+        <div className="p-2 bg-gray-100 md:hidden flex flex-col gap-2">
+          <input
+            type="text"
+            placeholder="Rechercher par nom..."
+            value={searchName}
+            onChange={e => setSearchName(e.target.value)}
+            className="border rounded p-2 w-full"
+          />
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
@@ -170,9 +179,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 onChange={e => setFilterType(e.target.value)}
                 className="border rounded p-2"
               >
-                {uniqueTypes.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <select
                 value={filterDate}
@@ -189,16 +196,21 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </details>
         </div>
 
-        {/* 📅 Filtres desktop */}
-        <div className="hidden md:flex p-2 gap-2 bg-gray-100">
+        {/* Desktop filters */}
+        <div className="hidden md:flex p-2 gap-2 bg-gray-100 items-center">
+          <input
+            type="text"
+            placeholder="Rechercher par nom..."
+            value={searchName}
+            onChange={e => setSearchName(e.target.value)}
+            className="border rounded p-2 flex-1"
+          />
           <select
             value={filterType}
             onChange={e => setFilterType(e.target.value)}
             className="border rounded p-2"
           >
-            {uniqueTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
+            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <select
             value={filterDate}
@@ -213,7 +225,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </select>
         </div>
 
-        {/* 🗺️ Carte */}
+        {/* Map */}
         <MapContainer
           whenCreated={mapInstance => (mapRef.current = mapInstance)}
           center={center}
@@ -262,7 +274,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         </MapContainer>
       </div>
 
-      {/* 🛠️ Admin Panel */}
+      {/* Admin Panel */}
       {isAdmin && isPanelOpen && (
         <div className="fixed inset-0 md:static z-[3000] md:z-auto">
           <div className="absolute inset-0 bg-black/40 md:hidden" onClick={onCloseAdminPanel} />
