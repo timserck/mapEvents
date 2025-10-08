@@ -17,6 +17,38 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
 
+  const [bulkJson, setBulkJson] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleBulkImport = async () => {
+    try {
+      const eventsArray = JSON.parse(bulkJson);
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`${API_URL}/events/bulk`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ events: eventsArray })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setMessage(`❌ Erreur: ${err.error}`);
+        return;
+      }
+
+      setMessage("✅ Import réussi !");
+      setBulkJson("");
+      refreshEvents(); // 🔁 Rafraîchir les événements après import
+    } catch (err) {
+      console.error("Erreur import JSON:", err);
+      setMessage("❌ Format JSON invalide");
+    }
+  };
+
   // Fetch events
   const fetchAllEvents = async () => {
     const res = await fetch(`${API_URL}/events`);
@@ -123,6 +155,23 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
           {editingEvent && <button type="button" onClick={resetForm} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Annuler</button>}
         </div>
       </form>
+
+      <div className="border p-3 rounded shadow bg-white">
+        <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
+        <textarea
+          value={bulkJson}
+          onChange={e => setBulkJson(e.target.value)}
+          placeholder='Exemple: [{"title":"Event 1","type":"concert","date":"2025-10-01","address":"Paris"},{"title":"Event 2","type":"expo","date":"2025-10-02","address":"Lyon"}]'
+          className="w-full h-40 p-2 border rounded font-mono text-sm"
+        />
+        <button
+          onClick={handleBulkImport}
+          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Importer
+        </button>
+        {message && <p className="mt-2 text-sm">{message}</p>}
+      </div>
 
       {/* Events Table */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
