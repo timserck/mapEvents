@@ -50,25 +50,39 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
   };
 
   useEffect(() => {
-    const controlDiv = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-custom");
+    const controlDiv = L.DomUtil.create(
+      "div",
+      "leaflet-bar leaflet-control leaflet-control-custom"
+    );
     controlDiv.style.backgroundColor = "white";
-    controlDiv.style.width = "34px";
-    controlDiv.style.height = "34px";
+    controlDiv.style.width = "38px";
+    controlDiv.style.height = "38px";
     controlDiv.style.display = "flex";
     controlDiv.style.alignItems = "center";
     controlDiv.style.justifyContent = "center";
     controlDiv.style.cursor = "pointer";
-    controlDiv.title = "📍 Aller à ma position";
-    controlDiv.innerText = "📍";
+    controlDiv.style.borderRadius = "4px";
+    controlDiv.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+    controlDiv.title = "Aller à ma position";
+
+    // Use a CDN SVG icon
+    const icon = L.DomUtil.create("img");
+    icon.src = "https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/location.svg"; // 📍 Tabler Icons CDN
+    icon.style.width = "20px";
+    icon.style.height = "20px";
+    controlDiv.appendChild(icon);
 
     controlDiv.onclick = locateUser;
 
     const customControl = L.Control.extend({
       options: { position: "topright" },
-      onAdd: () => controlDiv
+      onAdd: () => controlDiv,
     });
 
     map.addControl(new customControl());
+  
+
+
   }, [map]);
 
   return null;
