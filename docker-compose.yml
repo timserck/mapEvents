@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
       POSTGRES_DB: eventsdb
     ports:
-      - "5433:5432"   # évite conflit avec PostgreSQL local
+      - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -43,10 +43,7 @@ services:
     depends_on:
       - backend
 
-volumes:
-  db_data:
-
-nginx:
+  nginx:                   # <-- Must be inside "services"
     image: nginx:latest
     container_name: events_nginx
     ports:
@@ -54,10 +51,16 @@ nginx:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro   # Your DuckDNS certs
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - frontend
       - backend
     networks:
       - default
 
+volumes:
+  db_data:
+
+networks:
+  default:
+    driver: bridge
