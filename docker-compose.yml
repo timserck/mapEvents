@@ -46,3 +46,18 @@ services:
 volumes:
   db_data:
 
+nginx:
+    image: nginx:latest
+    container_name: events_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro   # Your DuckDNS certs
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - default
+
