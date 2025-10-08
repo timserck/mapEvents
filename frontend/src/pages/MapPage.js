@@ -123,6 +123,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   useEffect(() => { fetchEvents(); }, []);
 
+  // Track if user manually moved map
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -131,18 +132,18 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
+  // Go to event marker
+  const goToEvent = (ev) => {
+    if (!mapRef.current) return;
+    mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
+  };
+
   const filteredEvents = events.filter(
     e => (filterType === "all" || e.type === filterType) &&
          (filterDate === "all" || e.date === filterDate)
   );
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
-
-  const goToEvent = (ev) => {
-    if (!mapRef.current) return;
-    mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
-  };
-  
 
   return (
     <div className="flex h-screen">
@@ -171,10 +172,14 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </select>
         </div>
 
-        <MapContainer whenCreated={mapInstance => (mapRef.current = mapInstance)} ref={mapRef} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
+        <MapContainer
+          whenCreated={mapInstance => (mapRef.current = mapInstance)}
+          center={center}
+          zoom={12}
+          style={{ height: "100%", width: "100%" }}
+        >
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
           <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
 
           <MarkerClusterGroup>
@@ -196,7 +201,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
+          {userPosition && (
+            <Marker position={userPosition} icon={myPositionIcon}>
+              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
+            </Marker>
+          )}
         </MapContainer>
       </div>
 
