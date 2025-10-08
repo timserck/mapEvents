@@ -10,7 +10,7 @@ import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
 
-// Component to update map center
+// Map center updater
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
@@ -19,7 +19,7 @@ function MapCenterUpdater({ center }) {
   return null;
 }
 
-// Geolocation button component
+// Geolocation button
 function GeolocateButton({ setUserPosition, setUserAddress }) {
   const map = useMap();
 
@@ -35,7 +35,6 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
         setUserPosition([latitude, longitude]);
         map.setView([latitude, longitude], 15, { animate: true });
 
-        // Reverse geocode to get address
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
           const data = await res.json();
@@ -50,10 +49,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
   };
 
   useEffect(() => {
-    const controlDiv = L.DomUtil.create(
-      "div",
-      "leaflet-bar leaflet-control leaflet-control-custom"
-    );
+    const controlDiv = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-custom");
     controlDiv.style.backgroundColor = "white";
     controlDiv.style.width = "38px";
     controlDiv.style.height = "38px";
@@ -65,24 +61,16 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
     controlDiv.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
     controlDiv.title = "Aller à ma position";
 
-    // Use a CDN SVG icon
     const icon = L.DomUtil.create("img");
-    icon.src = "https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/location.svg"; // 📍 Tabler Icons CDN
+    icon.src = "https://cdn.jsdelivr.net/npm/@tabler/icons@2.47.0/icons/location.svg";
     icon.style.width = "20px";
     icon.style.height = "20px";
     controlDiv.appendChild(icon);
 
     controlDiv.onclick = locateUser;
 
-    const customControl = L.Control.extend({
-      options: { position: "topright" },
-      onAdd: () => controlDiv,
-    });
-
+    const customControl = L.Control.extend({ options: { position: "topright" }, onAdd: () => controlDiv });
     map.addControl(new customControl());
-  
-
-
   }, [map]);
 
   return null;
@@ -150,12 +138,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
   const uniqueDates = ["all", ...new Set(events.map(e => e.date))];
 
+  // ✅ Corrected goToEvent function
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
-    const map = mapRef.current; 
-    const leafletMap = map?.leafletElement || map?.getMap?.();
-    if (!leafletMap) return;
-    leafletMap.setView([ev.latitude, ev.longitude], leafletMap.getZoom(), { animate: true });
+    const map = mapRef.current; // Leaflet map instance
+    map.setView([ev.latitude, ev.longitude], 15, { animate: true });
   };
 
   return (
@@ -189,7 +176,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-          {/* Geolocation button */}
           <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
 
           <MarkerClusterGroup>
@@ -224,7 +210,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent}  mapRef={mapRef} />
+              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent} />
             </div>
           </div>
         </div>

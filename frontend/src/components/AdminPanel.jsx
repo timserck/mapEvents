@@ -20,6 +20,7 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
   const [bulkJson, setBulkJson] = useState("");
   const [message, setMessage] = useState("");
 
+  // Bulk import
   const handleBulkImport = async () => {
     try {
       const eventsArray = JSON.parse(bulkJson);
@@ -42,7 +43,7 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
 
       setMessage("✅ Import réussi !");
       setBulkJson("");
-      refreshEvents(); // 🔁 Rafraîchir les événements après import
+      refreshEvents();
     } catch (err) {
       console.error("Erreur import JSON:", err);
       setMessage("❌ Format JSON invalide");
@@ -156,6 +157,7 @@ export default function AdminPanel({ refreshEvents, goToEvent }) {
         </div>
       </form>
 
+      {/* Bulk JSON import */}
       <div className="border p-3 rounded shadow bg-white">
         <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
         <textarea
