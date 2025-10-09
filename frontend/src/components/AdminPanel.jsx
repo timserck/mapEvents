@@ -354,7 +354,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         <button
           onClick={async () => {
             try {
-              await fetch(`${API_URL}/public-collection`, {
+              await fetch(`${API_URL}/collections/activate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: activeCollection }),

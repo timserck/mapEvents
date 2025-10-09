@@ -105,7 +105,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => {
     const fetchPublicCollection = async () => {
       try {
-        const res = await fetch(`${API_URL}/public-collection`);
+        const res = await fetch(`${API_URL}/collections/active`);
         const data = await res.json();
         if (data?.name) {
           setPublicCollection(data.name);
