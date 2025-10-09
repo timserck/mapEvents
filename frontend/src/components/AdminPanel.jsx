@@ -57,21 +57,30 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   // Create collection
   const createCollection = async (name) => {
+    if (!name) return;
+  
     try {
       const res = await fetch(`${API_URL}/collections`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name })
       });
+  
       if (res.ok) {
+        // Fetch the updated collections list
         const updatedCollections = await fetchCollections();
-        setActiveCollection(updatedCollections.includes(name) ? name : updatedCollections[0]);
-        setActiveCollectionOnMap(name);
+  
+        // Set the active collection to the newly created one
+        if (updatedCollections.includes(name)) {
+          setActiveCollection(name);
+          setActiveCollectionOnMap(name);
+        }
       }
     } catch (err) {
       console.error("Erreur création collection:", err);
     }
   };
+  
 
   // Delete collection
   const deleteCollection = async (name) => {
