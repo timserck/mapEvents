@@ -36,7 +36,6 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       return [];
     }
   };
-  
 
   useEffect(() => { fetchCollections(); }, []);
 
@@ -46,7 +45,9 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setEvents([]);
       return;
     }
-    const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
+    const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
     const data = await res.json();
     data.sort((a, b) => (a.position || 0) - (b.position || 0));
     setEvents(data);
@@ -63,7 +64,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         body: JSON.stringify({ name })
       });
       if (res.ok) {
-        const updatedCollections = await fetchCollections(); // fetch and wait
+        const updatedCollections = await fetchCollections();
         setActiveCollection(updatedCollections.includes(name) ? name : updatedCollections[0]);
         setActiveCollectionOnMap(name);
       }
@@ -71,7 +72,6 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       console.error("Erreur création collection:", err);
     }
   };
-  
 
   // Delete collection
   const deleteCollection = async (name) => {
@@ -134,6 +134,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       body: JSON.stringify({ 
         title, type, date, description, address,
         latitude: finalLat, longitude: finalLon,
+        position: editingEvent?.position || events.length + 1,
         collection: activeCollection
       })
     });
@@ -243,7 +244,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       <div className="border p-3 rounded shadow bg-white">
         <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
         <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)}
-          placeholder='[{"title":"Event 1","type":"concert","date":"2025-10-01","address":"Paris"}]'
+          placeholder='[{"title":"Concert de Jazz","type":"Concert","date":"2025-10-16","description":"...","address":"Paris, France"}]'
           className="w-full h-40 p-2 border rounded font-mono text-sm"/>
         <button onClick={handleBulkImport} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Importer</button>
         {message && <p className="mt-2 text-sm">{message}</p>}
