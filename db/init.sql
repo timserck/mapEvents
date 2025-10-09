@@ -65,3 +65,11 @@ VALUES (
     'admin'
 )
 ON CONFLICT (username) DO NOTHING;
+
+
+CREATE TABLE IF NOT EXISTS active_collection (
+  id SERIAL PRIMARY KEY,
+  collection_name TEXT UNIQUE NOT NULL
+);
+INSERT INTO active_collection (collection_name) VALUES ('Default') ON CONFLICT DO NOTHING;
+

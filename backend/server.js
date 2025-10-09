@@ -128,11 +128,46 @@ app.delete("/collections/:name", authMiddleware, adminMiddleware, async (req, re
 });
 
 // =========================
+//   ACTIVATE COLLECTION FOR ALL USERS
+// =========================
+app.post("/collections/activate", authMiddleware, adminMiddleware, async (req, res) => {
+  const { collection } = req.body;
+  if (!collection) return res.status(400).json({ error: "collection required" });
+  try {
+    await pool.query(
+      `INSERT INTO active_collection (id, collection_name)
+       VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET collection_name = EXCLUDED.collection_name`,
+      [collection]
+    );
+    res.json({ success: true, activeCollection: collection });
+  } catch (err) {
+    console.error("Set active collection error:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+app.get("/collections/active", async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT collection_name FROM active_collection WHERE id=1`);
+    const active = result.rows.length ? result.rows[0].collection_name : "Default";
+    res.json({ activeCollection: active });
+  } catch (err) {
+    console.error("Get active collection error:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+// =========================
 //        EVENTS API
 // =========================
 app.get("/events", async (req, res) => {
   try {
-    const collection = req.query.collection || "Default";
+    let collection = req.query.collection;
+    if (!collection) {
+      const activeRes = await pool.query(`SELECT collection_name FROM active_collection WHERE id=1`);
+      collection = activeRes.rows.length ? activeRes.rows[0].collection_name : "Default";
+    }
     const result = await pool.query(`
       SELECT e.id, e.title, e.type, e.date, e.description, e.address, e.position, 
              ST_Y(e.location::geometry) AS latitude,
@@ -254,9 +289,6 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) =
   } catch (err) { await pool.query("ROLLBACK"); console.error(err); res.status(500).json({ error: "DB reorder error" }); }
 });
 
-// =========================
-//      DELETE ALL EVENTS IN COLLECTION
-// =========================
 app.delete("/events", authMiddleware, adminMiddleware, async (req, res) => {
   const { collection } = req.query;
   if (!collection) return res.status(400).json({ error: "collection query required" });
