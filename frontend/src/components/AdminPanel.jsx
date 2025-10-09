@@ -30,14 +30,13 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       });
       const data = await res.json();
       setCollections(data);
-      if (data.length > 0 && !activeCollection) {
-        setActiveCollection(data[0]);
-        setActiveCollectionOnMap(data[0]);
-      }
+      return data;
     } catch (err) {
       console.error("Erreur fetch collections:", err);
+      return [];
     }
   };
+  
 
   useEffect(() => { fetchCollections(); }, []);
 
@@ -64,14 +63,15 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         body: JSON.stringify({ name })
       });
       if (res.ok) {
-        await fetchCollections();
-        setActiveCollection(name);
+        const updatedCollections = await fetchCollections(); // fetch and wait
+        setActiveCollection(updatedCollections.includes(name) ? name : updatedCollections[0]);
         setActiveCollectionOnMap(name);
       }
     } catch (err) {
       console.error("Erreur création collection:", err);
     }
   };
+  
 
   // Delete collection
   const deleteCollection = async (name) => {
