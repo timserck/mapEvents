@@ -79,9 +79,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
 }
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
-  const [activeCollection, setActiveCollection] = useState(() => {
-    return localStorage.getItem("activeCollection") || "";
-  });
+  const [activeCollection, setActiveCollection] = useState(() => localStorage.getItem("activeCollection") || "");
   const [publicCollection, setPublicCollection] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventImages, setEventImages] = useState({});
@@ -92,20 +90,18 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userAddress, setUserAddress] = useState(null);
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
+  const [collections, setCollections] = useState([]);
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // 🧠 Save active collection in localStorage
+  // Save active collection
   useEffect(() => {
-    if (activeCollection) {
-      localStorage.setItem("activeCollection", activeCollection);
-    } else {
-      localStorage.removeItem("activeCollection");
-    }
+    if (activeCollection) localStorage.setItem("activeCollection", activeCollection);
+    else localStorage.removeItem("activeCollection");
   }, [activeCollection]);
 
-  // 🧠 Load public collection from backend
+  // Fetch public collection from backend
   useEffect(() => {
     const fetchPublicCollection = async () => {
       try {
@@ -113,19 +109,16 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
         const data = await res.json();
         if (data?.name) {
           setPublicCollection(data.name);
-          // If user is not admin and has no local selection → use public
-          if (!isAdmin && !activeCollection) {
-            setActiveCollection(data.name);
-          }
+          if (!isAdmin && !activeCollection) setActiveCollection(data.name);
         }
       } catch (err) {
-        console.error("Erreur lors du chargement de la collection publique :", err);
+        console.error("Erreur fetch public collection:", err);
       }
     };
     fetchPublicCollection();
   }, [isAdmin, activeCollection]);
 
-  // 🧠 Fetch events when activeCollection changes
+  // Fetch events
   useEffect(() => {
     if (!activeCollection) { setEvents([]); return; }
     const fetchEvents = async () => {
@@ -143,7 +136,22 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     fetchEvents();
   }, [activeCollection]);
 
-  // 🧠 Fetch images for events
+  // Fetch collections for filter (admin)
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchCollections = async () => {
+      try {
+        const res = await fetch(`${API_URL}/collections`);
+        const data = await res.json();
+        setCollections(data);
+      } catch (err) {
+        console.error("Fetch collections error:", err);
+      }
+    };
+    fetchCollections();
+  }, [isAdmin]);
+
+  // Fetch event images
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -171,7 +179,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // Go to event marker
+  // Go to event
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
     mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
@@ -179,12 +187,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
   // Filters
   const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
-  const uniqueDates = [
-    "all",
-    ...Array.from(new Set(events.map(e => formatDate(e.date)))).sort(
-      (a, b) => new Date(b) - new Date(a)
-    )
-  ];
+  const uniqueDates = ["all", ...Array.from(new Set(events.map(e => formatDate(e.date)))).sort((a,b)=>new Date(b)-new Date(a))];
 
   const filteredEvents = events.filter(
     e =>
@@ -196,76 +199,31 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filters */}
+        {/* Filters (mobile) */}
         <div className="p-2 bg-gray-100 md:hidden flex flex-col gap-2">
-          <input
-            type="text"
-            placeholder="Rechercher par nom..."
-            value={searchName}
-            onChange={e => setSearchName(e.target.value)}
-            className="border rounded p-2 w-full"
-          />
+          <input type="text" placeholder="Rechercher par nom..." value={searchName} onChange={e => setSearchName(e.target.value)} className="border rounded p-2 w-full" />
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <select
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-                className="border rounded p-2"
-              >
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">
                 {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <select
-                value={filterDate}
-                onChange={e => setFilterDate(e.target.value)}
-                className="border rounded p-2"
-              >
-                {uniqueDates.map(d => (
-                  <option key={d} value={d}>
-                    {d === "all" ? "Toutes les dates" : d}
-                  </option>
-                ))}
+              <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">
+                {uniqueDates.map(d => <option key={d} value={d}>{d==="all"?"Toutes les dates":d}</option>)}
               </select>
             </div>
           </details>
         </div>
 
-        {/* Desktop filters */}
+        {/* Filters (desktop) */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100 items-center">
-          <input
-            type="text"
-            placeholder="Rechercher par nom..."
-            value={searchName}
-            onChange={e => setSearchName(e.target.value)}
-            className="border rounded p-2 flex-1"
-          />
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            className="border rounded p-2"
-          >
-            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select
-            value={filterDate}
-            onChange={e => setFilterDate(e.target.value)}
-            className="border rounded p-2"
-          >
-            {uniqueDates.map(d => (
-              <option key={d} value={d}>
-                {d === "all" ? "Toutes les dates" : d}
-              </option>
-            ))}
-          </select>
+          <input type="text" placeholder="Rechercher par nom..." value={searchName} onChange={e => setSearchName(e.target.value)} className="border rounded p-2 flex-1" />
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border rounded p-2">{uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+          <select value={filterDate} onChange={e => setFilterDate(e.target.value)} className="border rounded p-2">{uniqueDates.map(d => <option key={d} value={d}>{d==="all"?"Toutes les dates":d}</option>)}</select>
         </div>
 
         {/* Map */}
-        <MapContainer
-          whenCreated={mapInstance => (mapRef.current = mapInstance)}
-          center={center}
-          zoom={12}
-          style={{ height: "100%", width: "100%" }}
-        >
+        <MapContainer whenCreated={mapInstance => (mapRef.current = mapInstance)} center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
@@ -282,17 +240,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
-                  <LazyImage
-                    src={eventImages[e.id] || DEFAULT_IMAGE}
-                    alt={e.title}
-                    style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }}
-                  />
-                  <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-500 underline block mt-2"
-                  >
+                  <LazyImage src={eventImages[e.id] || DEFAULT_IMAGE} alt={e.title} style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }} />
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer" className="text-blue-500 underline block mt-2">
                     🚶 Itinéraire
                   </a>
                 </Popup>
@@ -300,11 +249,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             ))}
           </MarkerClusterGroup>
 
-          {userPosition && (
-            <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
-            </Marker>
-          )}
+          {userPosition && <Marker position={userPosition} icon={myPositionIcon}><Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup></Marker>}
         </MapContainer>
       </div>
 

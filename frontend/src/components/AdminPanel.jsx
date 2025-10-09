@@ -22,12 +22,23 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const [bulkJson, setBulkJson] = useState("");
   const [message, setMessage] = useState("");
 
-  // 🆕 Load saved collection from localStorage on mount
+  // 🆕 Load saved collection from localStorage and active collection for all users
   useEffect(() => {
     const saved = localStorage.getItem("activeCollection");
     if (saved) {
       setActiveCollection(saved);
       setActiveCollectionOnMap(saved);
+    } else {
+      // Fetch currently active collection from backend
+      fetch(`${API_URL}/collections/active`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.collection) {
+            setActiveCollection(data.collection);
+            setActiveCollectionOnMap(data.collection);
+          }
+        })
+        .catch(err => console.error("Erreur fetch active collection:", err));
     }
   }, []);
 
@@ -87,15 +98,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       if (!res.ok) throw new Error("Cannot create collection");
 
       const newCollection = await res.json();
-
-      // Add new collection to state immediately
       setCollections(prev => [...prev, newCollection.name]);
 
-      // Set as active collection
       setActiveCollection(newCollection.name);
       setActiveCollectionOnMap(newCollection.name);
-
-      // Initialize empty events array for this collection
       setEvents([]);
     } catch (err) {
       console.error("Erreur création collection:", err);
@@ -147,7 +153,6 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     let finalLat = latitude;
     let finalLon = longitude;
 
-    // Geocode if lat/lon missing or address changed
     if ((!finalLat || !finalLon) || (editingEvent && editingEvent.address !== address)) {
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
@@ -344,6 +349,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </DragDropContext>
       </div>
 
+      {/* Set collection active for all users */}
       {activeCollection && (
         <button
           onClick={async () => {
