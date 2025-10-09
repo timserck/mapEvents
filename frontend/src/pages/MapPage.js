@@ -79,6 +79,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
 }
 
 export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
+  const [activeCollection, setActiveCollection] = useState("");
   const [events, setEvents] = useState([]);
   const [eventImages, setEventImages] = useState({});
   const [filterType, setFilterType] = useState("all");
@@ -95,7 +96,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   // Fetch events
   const fetchEvents = async () => {
     try {
-      const res = await fetch(`${API_URL}/events`);
+      if (!activeCollection) { setEvents([]); return; }
+      const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
       const data = await res.json();
       setEvents(data);
       if (!userHasMovedMap && data.length > 0)
@@ -158,6 +160,18 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       (filterDate === "all" || formatDate(e.date) === filterDate) &&
       e.title.toLowerCase().includes(searchName.toLowerCase())
   );
+
+
+  useEffect(() => {
+    if (!activeCollection) { setEvents([]); return; }
+    const fetchEvents = async () => {
+      const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
+      const data = await res.json();
+      data.sort((a, b) => (a.position || 0) - (b.position || 0));
+      setEvents(data);
+    };
+    fetchEvents();
+  }, [activeCollection]);
 
   return (
     <div className="flex h-screen">
@@ -284,7 +298,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent} />
+              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent} activeCollection={activeCollection} setActiveCollectionOnMap={setActiveCollection} />
             </div>
           </div>
         </div>

@@ -2,6 +2,13 @@
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
+-- Table des collections
+CREATE TABLE IF NOT EXISTS collections (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Table des événements
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
@@ -11,11 +18,17 @@ CREATE TABLE IF NOT EXISTS events (
     description TEXT,
     address TEXT, -- Adresse de l'événement
     location GEOGRAPHY(POINT, 4326) NOT NULL, -- Coordonnées GPS
-    position INT DEFAULT 0 -- Position/ordre pour numérotation des pins
+    position INT DEFAULT 0, -- Position/ordre pour numérotation des pins
+    collection_id INT NOT NULL REFERENCES collections(id) ON DELETE CASCADE
 );
 
+-- Exemple de collection
+INSERT INTO collections (name)
+VALUES ('Default')
+ON CONFLICT (name) DO NOTHING;
+
 -- Exemple d’événement
-INSERT INTO events (title, type, date, description, address, location, position)
+INSERT INTO events (title, type, date, description, address, location, position, collection_id)
 VALUES (
     'Concert de Jazz',
     'Concert',
@@ -23,7 +36,8 @@ VALUES (
     'Concert en plein air au centre-ville',
     'Paris, France',
     ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)'),
-    1
+    1,
+    (SELECT id FROM collections WHERE name = 'Default')
 );
 
 -- Table des utilisateurs
@@ -34,11 +48,29 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL
 );
 
--- Ajouter un utilisateur admin
--- Mot de passe : password
+-- Ajouter un utilisateur admin (mot de passe : password)
 INSERT INTO users (username, password_hash, role)
 VALUES (
     'admin',
     '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'admin'
-);
+)
+ON CONFLICT (username) DO NOTHING;
+
+
+-- Étape 1 : Créer la collection par défaut
+INSERT INTO collections (name) VALUES ('Default') ON CONFLICT (name) DO NOTHING;
+
+-- Étape 2 : Ajouter la colonne collection_id si elle n'existe pas
+ALTER TABLE events ADD COLUMN IF NOT EXISTS collection_id INT;
+
+-- Étape 3 : Mettre à jour tous les événements pour les rattacher à la collection Default
+UPDATE events
+SET collection_id = (SELECT id FROM collections WHERE name = 'Default')
+WHERE collection_id IS NULL;
+
+-- Étape 4 : Ajouter la contrainte de clé étrangère
+ALTER TABLE events
+  ADD CONSTRAINT fk_collection
+  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE;
+

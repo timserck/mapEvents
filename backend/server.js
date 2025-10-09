@@ -4,7 +4,7 @@ const app = express();
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const bodyParser = require("body-parser");
-const pool = require("./db"); // your PostgreSQL pool
+const pool = require("./db");
 const cors = require("cors");
 const fetch = require("node-fetch");
 
@@ -59,7 +59,9 @@ async function geocodeAddress(address) {
   return null;
 }
 
-// --- Auth Routes ---
+// =========================
+//        AUTH
+// =========================
 app.post("/auth/login", async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -78,15 +80,51 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// --- Event Routes ---
+// =========================
+//     COLLECTIONS API
+// =========================
+app.get("/collections", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT DISTINCT collection FROM events ORDER BY collection ASC`);
+    res.json(result.rows.map(r => r.collection));
+  } catch (err) {
+    console.error("Fetch collections error:", err);
+    res.status(500).json({ error: "DB fetch error" });
+  }
+});
+
+app.post("/collections", authMiddleware, adminMiddleware, async (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: "name required" });
+  // Optional: verify if name exists
+  res.json({ success: true, name });
+});
+
+app.delete("/collections/:name", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const name = decodeURIComponent(req.params.name);
+    await pool.query("DELETE FROM events WHERE collection=$1", [name]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete collection error:", err);
+    res.status(500).json({ error: "DB delete error" });
+  }
+});
+
+// =========================
+//        EVENTS API
+// =========================
 app.get("/events", async (req, res) => {
   try {
+    const collection = req.query.collection || "default";
     const result = await pool.query(`
-      SELECT id,title,type,date,description,address,position,
+      SELECT id,title,type,date,description,address,position,collection,
              CASE WHEN location IS NOT NULL THEN ST_Y(location::geometry) ELSE NULL END AS latitude,
              CASE WHEN location IS NOT NULL THEN ST_X(location::geometry) ELSE NULL END AS longitude
-      FROM events ORDER BY position ASC
-    `);
+      FROM events
+      WHERE collection=$1
+      ORDER BY position ASC
+    `, [collection]);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch events error:", err);
@@ -95,7 +133,8 @@ app.get("/events", async (req, res) => {
 });
 
 app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
-  let { title,type,date,latitude,longitude,description,address,position } = req.body;
+  let { title,type,date,latitude,longitude,description,address,position,collection } = req.body;
+  if (!collection) collection = "default";
   try {
     if (!title||!type||!date||!address) return res.status(400).json({ error: "title,type,date,address required" });
     if (date.includes("T")) date = date.split("T")[0];
@@ -105,16 +144,16 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
       latitude=geo.latitude; longitude=geo.longitude;
     }
     if (!position) {
-      const posRes = await pool.query("SELECT COALESCE(MAX(position),0)+1 AS next FROM events");
+      const posRes = await pool.query("SELECT COALESCE(MAX(position),0)+1 AS next FROM events WHERE collection=$1", [collection]);
       position = posRes.rows[0].next;
     }
     const result = await pool.query(
-      `INSERT INTO events (title,type,date,description,address,location,position)
-       VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7)
-       RETURNING id,title,type,date,description,address,position,
+      `INSERT INTO events (title,type,date,description,address,location,position,collection)
+       VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,$8)
+       RETURNING id,title,type,date,description,address,position,collection,
                  ST_Y(location::geometry) AS latitude,
                  ST_X(location::geometry) AS longitude`,
-      [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`,position]
+      [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`,position,collection]
     );
     res.json(result.rows[0]);
   } catch (err) { console.error(err); res.status(500).json({ error: "DB insert error" }); }
@@ -122,7 +161,8 @@ app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
 
 app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
   const { id } = req.params;
-  let { title,type,date,description,address,latitude,longitude } = req.body;
+  let { title,type,date,description,address,latitude,longitude,collection } = req.body;
+  if (!collection) collection = "default";
   try {
     if (!title||!type||!date||!address) return res.status(400).json({ error: "title,type,date,address required" });
     if (date.includes("T")) date = date.split("T")[0];
@@ -132,12 +172,12 @@ app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
       latitude=geo.latitude; longitude=geo.longitude;
     }
     const result = await pool.query(
-      `UPDATE events SET title=$1,type=$2,date=$3,description=$4,address=$5,location=ST_GeogFromText($6)
+      `UPDATE events SET title=$1,type=$2,date=$3,description=$4,address=$5,location=ST_GeogFromText($6),collection=$8
        WHERE id=$7
-       RETURNING id,title,type,date,description,address,
+       RETURNING id,title,type,date,description,address,collection,
                  ST_Y(location::geometry) AS latitude,
                  ST_X(location::geometry) AS longitude`,
-      [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`,id]
+      [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`,id,collection]
     );
     if (!result.rows.length) return res.status(404).json({ error: "Event not found" });
     res.json(result.rows[0]);
@@ -150,7 +190,8 @@ app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
-  const { events } = req.body;
+  const { events, collection } = req.body;
+  const collectionName = collection || "default";
   if(!Array.isArray(events)||!events.length) return res.status(400).json({error:"Events array required"});
   try {
     const inserted=[];
@@ -161,12 +202,12 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
         if(geo){latitude=geo.latitude;longitude=geo.longitude;}
       }
       const result=await pool.query(
-        `INSERT INTO events (title,type,date,description,address,location)
-         VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6))
-         RETURNING id,title,type,date,description,address,
+        `INSERT INTO events (title,type,date,description,address,location,collection)
+         VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7)
+         RETURNING id,title,type,date,description,address,collection,
                    ST_Y(location::geometry) AS latitude,
                    ST_X(location::geometry) AS longitude`,
-        [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`]
+        [title,type,date,description,address,`SRID=4326;POINT(${longitude} ${latitude})`,collectionName]
       );
       inserted.push(result.rows[0]);
     }
@@ -174,15 +215,14 @@ app.post("/events/bulk", authMiddleware, adminMiddleware, async (req,res)=>{
   } catch(err){ console.error(err); res.status(500).json({error:"DB bulk insert error"});}
 });
 
-
 app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req,res)=>{
   const { orderedIds } = req.body;
-  if(!Array.isArray(orderedIds)||!orderedIds.length) return res.status(400).json({error:"orderedIds array required"});  try {
-    // Utilisation d'une transaction pour mettre à jour toutes les positions
+  if(!Array.isArray(orderedIds)||!orderedIds.length) return res.status(400).json({error:"orderedIds array required"});
+  try {
     await pool.query("BEGIN");
     for (let i = 0; i < orderedIds.length; i++) {
       const id = orderedIds[i];
-      const position = i + 1; // position commence à 1
+      const position = i + 1;
       await pool.query("UPDATE events SET position=$1 WHERE id=$2", [position, id]);
     }
     await pool.query("COMMIT");
@@ -195,4 +235,4 @@ app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req,res)=>{
 });
 
 // --- Start Server ---
-app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000"));
+app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000 with collections"));
