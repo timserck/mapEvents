@@ -10,16 +10,18 @@ import { formatDate } from "../utils.js";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
 
-// Map center updater
+// ✅ Map center updater
 function MapCenterUpdater({ center }) {
   const map = useMap();
   useEffect(() => {
-    if (center && Array.isArray(center)) map.setView(center, map.getZoom(), { animate: true });
+    if (center && Array.isArray(center)) {
+      map.setView(center, map.getZoom(), { animate: true });
+    }
   }, [center, map]);
   return null;
 }
 
-// Geolocation button
+// ✅ Geolocation button
 function GeolocateButton({ setUserPosition, setUserAddress }) {
   const map = useMap();
 
@@ -41,7 +43,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
           );
           const data = await res.json();
           setUserAddress(data.display_name || null);
-        } catch { }
+        } catch {}
       },
       (err) => {
         alert("Impossible de récupérer votre position : " + err.message);
@@ -51,7 +53,10 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
   };
 
   useEffect(() => {
-    const controlDiv = L.DomUtil.create("div", "leaflet-bar leaflet-control leaflet-control-custom");
+    const controlDiv = L.DomUtil.create(
+      "div",
+      "leaflet-bar leaflet-control leaflet-control-custom"
+    );
     controlDiv.style.backgroundColor = "white";
     controlDiv.style.width = "38px";
     controlDiv.style.height = "38px";
@@ -71,7 +76,10 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
 
     controlDiv.onclick = locateUser;
 
-    const customControl = L.Control.extend({ options: { position: "topright" }, onAdd: () => controlDiv });
+    const customControl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd: () => controlDiv,
+    });
     map.addControl(new customControl());
   }, [map]);
 
@@ -93,22 +101,46 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
-  // Fetch events
+  // 🧭 Load active collection from localStorage
+  useEffect(() => {
+    const savedCollection = localStorage.getItem("activeCollection");
+    if (savedCollection) setActiveCollection(savedCollection);
+  }, []);
+
+  // 🧭 Save active collection to localStorage
+  useEffect(() => {
+    if (activeCollection) {
+      localStorage.setItem("activeCollection", activeCollection);
+    } else {
+      localStorage.removeItem("activeCollection");
+    }
+  }, [activeCollection]);
+
+  // 📡 Fetch events
   const fetchEvents = async () => {
     try {
-      if (!activeCollection) { setEvents([]); return; }
-      const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
+      if (!activeCollection) {
+        setEvents([]);
+        return;
+      }
+      const res = await fetch(
+        `${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`
+      );
       const data = await res.json();
+      data.sort((a, b) => (a.position || 0) - (b.position || 0));
       setEvents(data);
-      if (!userHasMovedMap && data.length > 0)
+
+      if (!userHasMovedMap && data.length > 0) {
         setCenter([data[0].latitude, data[0].longitude]);
+      }
+
       fetchImagesForEvents(data);
     } catch (err) {
       console.error("Fetch events error:", err);
     }
   };
 
-  // Fetch images
+  // 📸 Fetch Unsplash images with cache
   const fetchImagesForEvents = async (eventsList) => {
     const updatedImages = {};
     for (let ev of eventsList) {
@@ -119,17 +151,19 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           const query = encodeURIComponent(ev.title);
           const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
           if (res.ok && res.url) imageUrl = res.url;
-        } catch { }
+        } catch {}
       }
       setCache(cacheKey, imageUrl, CACHE_TTL);
       updatedImages[ev.id] = imageUrl;
     }
-    setEventImages(prev => ({ ...prev, ...updatedImages }));
+    setEventImages((prev) => ({ ...prev, ...updatedImages }));
   };
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    fetchEvents();
+  }, [activeCollection]);
 
-  // Track if user manually moved map
+  // 📍 Track manual map movement
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -138,51 +172,39 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // Go to event marker
+  // 🗺️ Go to event marker
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
     mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
   };
 
-  // Prepare filters
-  const uniqueTypes = ["all", ...new Set(events.map(e => e.type))];
+  // 🧰 Filters
+  const uniqueTypes = ["all", ...new Set(events.map((e) => e.type))];
   const uniqueDates = [
     "all",
-    ...Array.from(new Set(events.map(e => formatDate(e.date)))).sort(
+    ...Array.from(new Set(events.map((e) => formatDate(e.date)))).sort(
       (a, b) => new Date(b) - new Date(a)
-    )
+    ),
   ];
 
-  // Filtered events
   const filteredEvents = events.filter(
-    e =>
+    (e) =>
       (filterType === "all" || e.type === filterType) &&
       (filterDate === "all" || formatDate(e.date) === filterDate) &&
       e.title.toLowerCase().includes(searchName.toLowerCase())
   );
 
-
-  useEffect(() => {
-    if (!activeCollection) { setEvents([]); return; }
-    const fetchEvents = async () => {
-      const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
-      const data = await res.json();
-      data.sort((a, b) => (a.position || 0) - (b.position || 0));
-      setEvents(data);
-    };
-    fetchEvents();
-  }, [activeCollection]);
-
   return (
     <div className="flex h-screen">
+      {/* 🌐 Map Section */}
       <div className="flex-1 flex flex-col">
-        {/* Filters */}
+        {/* 📱 Mobile Filters */}
         <div className="p-2 bg-gray-100 md:hidden flex flex-col gap-2">
           <input
             type="text"
             placeholder="Rechercher par nom..."
             value={searchName}
-            onChange={e => setSearchName(e.target.value)}
+            onChange={(e) => setSearchName(e.target.value)}
             className="border rounded p-2 w-full"
           />
           <details>
@@ -190,17 +212,21 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             <div className="mt-2 flex flex-col gap-2">
               <select
                 value={filterType}
-                onChange={e => setFilterType(e.target.value)}
+                onChange={(e) => setFilterType(e.target.value)}
                 className="border rounded p-2"
               >
-                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                {uniqueTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
               <select
                 value={filterDate}
-                onChange={e => setFilterDate(e.target.value)}
+                onChange={(e) => setFilterDate(e.target.value)}
                 className="border rounded p-2"
               >
-                {uniqueDates.map(d => (
+                {uniqueDates.map((d) => (
                   <option key={d} value={d}>
                     {d === "all" ? "Toutes les dates" : d}
                   </option>
@@ -210,28 +236,32 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </details>
         </div>
 
-        {/* Desktop filters */}
+        {/* 🖥️ Desktop Filters */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100 items-center">
           <input
             type="text"
             placeholder="Rechercher par nom..."
             value={searchName}
-            onChange={e => setSearchName(e.target.value)}
+            onChange={(e) => setSearchName(e.target.value)}
             className="border rounded p-2 flex-1"
           />
           <select
             value={filterType}
-            onChange={e => setFilterType(e.target.value)}
+            onChange={(e) => setFilterType(e.target.value)}
             className="border rounded p-2"
           >
-            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            {uniqueTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
           <select
             value={filterDate}
-            onChange={e => setFilterDate(e.target.value)}
+            onChange={(e) => setFilterDate(e.target.value)}
             className="border rounded p-2"
           >
-            {uniqueDates.map(d => (
+            {uniqueDates.map((d) => (
               <option key={d} value={d}>
                 {d === "all" ? "Toutes les dates" : d}
               </option>
@@ -239,36 +269,60 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           </select>
         </div>
 
-        {/* Map */}
+        {/* 🗺️ Map */}
         <MapContainer
-          whenCreated={mapInstance => (mapRef.current = mapInstance)}
+          whenCreated={(mapInstance) => (mapRef.current = mapInstance)}
           center={center}
           zoom={12}
           style={{ height: "100%", width: "100%" }}
         >
           <MapCenterUpdater center={center} />
-          <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
+          <TileLayer
+            attribution="&copy; OpenStreetMap"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <GeolocateButton
+            setUserPosition={setUserPosition}
+            setUserAddress={setUserAddress}
+          />
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
               <Marker
                 key={e.id}
                 position={[e.latitude, e.longitude]}
-                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(e.position || index + 1, e.type)}
+                icon={
+                  e.type.toLowerCase() === "hotel"
+                    ? hotelIcon
+                    : createNumberedIcon(e.position || index + 1, e.type)
+                }
               >
                 <Popup minWidth={250}>
-                  <strong>{(e.position || index + 1)}. {e.title}</strong>
-                  <p>{e.type} - {formatDate(e.date)}</p>
+                  <strong>
+                    {(e.position || index + 1)}. {e.title}
+                  </strong>
+                  <p>
+                    {e.type} - {formatDate(e.date)}
+                  </p>
                   <p>{e.address}</p>
-                  <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
+                  <div
+                    className="mt-2"
+                    dangerouslySetInnerHTML={{ __html: e.description }}
+                  />
                   <LazyImage
                     src={eventImages[e.id] || DEFAULT_IMAGE}
                     alt={e.title}
-                    style={{ width: "100%", height: "auto", marginTop: "6px", borderRadius: "6px" }}
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      marginTop: "6px",
+                      borderRadius: "6px",
+                    }}
                   />
                   <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(e.address)}`}
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                      e.address
+                    )}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-blue-500 underline block mt-2"
@@ -282,23 +336,35 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           {userPosition && (
             <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
+              <Popup>
+                📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}
+              </Popup>
             </Marker>
           )}
         </MapContainer>
       </div>
 
-      {/* Admin Panel */}
+      {/* 🛠️ Admin Panel */}
       {isAdmin && isPanelOpen && (
         <div className="fixed inset-0 md:static z-[3000] md:z-auto">
-          <div className="absolute inset-0 bg-black/40 md:hidden" onClick={onCloseAdminPanel} />
+          <div
+            className="absolute inset-0 bg-black/40 md:hidden"
+            onClick={onCloseAdminPanel}
+          />
           <div className="absolute inset-y-0 right-0 w-full bg-white md:bg-transparent md:relative md:h-full flex flex-col">
             <div className="md:hidden flex items-center justify-between p-3 border-b bg-white">
               <h3 className="font-semibold">Panel Admin</h3>
-              <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
+              <button onClick={onCloseAdminPanel} className="text-gray-600">
+                Fermer
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <AdminPanel refreshEvents={fetchEvents} goToEvent={goToEvent} activeCollection={activeCollection} setActiveCollectionOnMap={setActiveCollection} />
+              <AdminPanel
+                refreshEvents={fetchEvents}
+                goToEvent={goToEvent}
+                activeCollection={activeCollection}
+                setActiveCollectionOnMap={setActiveCollection}
+              />
             </div>
           </div>
         </div>

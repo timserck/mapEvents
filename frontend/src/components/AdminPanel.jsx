@@ -22,6 +22,24 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const [bulkJson, setBulkJson] = useState("");
   const [message, setMessage] = useState("");
 
+  // 🆕 Load saved collection from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("activeCollection");
+    if (saved) {
+      setActiveCollection(saved);
+      setActiveCollectionOnMap(saved);
+    }
+  }, []);
+
+  // 🆕 Save collection to localStorage whenever it changes
+  useEffect(() => {
+    if (activeCollection) {
+      localStorage.setItem("activeCollection", activeCollection);
+    } else {
+      localStorage.removeItem("activeCollection");
+    }
+  }, [activeCollection]);
+
   // Fetch collections
   const fetchCollections = async () => {
     try {
@@ -58,33 +76,31 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Create collection
   const createCollection = async (name) => {
     if (!name) return;
-  
+
     try {
       const res = await fetch(`${API_URL}/collections`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name })
       });
-  
+
       if (!res.ok) throw new Error("Cannot create collection");
-  
+
       const newCollection = await res.json();
-  
+
       // Add new collection to state immediately
       setCollections(prev => [...prev, newCollection.name]);
-  
+
       // Set as active collection
       setActiveCollection(newCollection.name);
       setActiveCollectionOnMap(newCollection.name);
-  
+
       // Initialize empty events array for this collection
       setEvents([]);
     } catch (err) {
       console.error("Erreur création collection:", err);
     }
   };
-  
-  
 
   // Delete collection
   const deleteCollection = async (name) => {
@@ -96,6 +112,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     await fetchCollections();
     setActiveCollection("");
     setActiveCollectionOnMap("");
+    localStorage.removeItem("activeCollection");
     setEvents([]);
   };
 
@@ -113,9 +130,13 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   const resetForm = () => {
     setEditingEvent(null);
-    setTitle(""); setType(""); setDate("");
-    setDescription(""); setAddress("");
-    setLatitude(null); setLongitude(null);
+    setTitle(""); 
+    setType(""); 
+    setDate("");
+    setDescription(""); 
+    setAddress("");
+    setLatitude(null); 
+    setLongitude(null);
   };
 
   // Submit create/edit
@@ -194,7 +215,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setBulkJson("");
       fetchAllEvents();
       refreshEvents();
-    } catch (err) { console.error("Erreur import JSON:", err); setMessage("❌ Format JSON invalide"); }
+    } catch (err) { 
+      console.error("Erreur import JSON:", err); 
+      setMessage("❌ Format JSON invalide"); 
+    }
   };
 
   // Drag & drop reorder
@@ -225,15 +249,24 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
           onChange={(e) => { setActiveCollection(e.target.value); setActiveCollectionOnMap(e.target.value); }}
           className="border p-2 rounded"
         >
+          <option value="">-- Sélectionner une collection --</option>
           {collections.map(c => (<option key={c} value={c}>{c}</option>))}
         </select>
 
-        <button onClick={() => { const name = prompt("Nom de la nouvelle collection"); if (name) createCollection(name); }}
-          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">➕ Nouvelle</button>
+        <button 
+          onClick={() => { const name = prompt("Nom de la nouvelle collection"); if (name) createCollection(name); }}
+          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+        >
+          ➕ Nouvelle
+        </button>
 
         {activeCollection && (
-          <button onClick={() => deleteCollection(activeCollection)}
-            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">🗑 Supprimer</button>
+          <button 
+            onClick={() => deleteCollection(activeCollection)}
+            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+          >
+            🗑 Supprimer
+          </button>
         )}
       </div>
 
