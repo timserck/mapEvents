@@ -66,20 +66,24 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         body: JSON.stringify({ name })
       });
   
-      if (res.ok) {
-        // Fetch the updated collections list
-        const updatedCollections = await fetchCollections();
+      if (!res.ok) throw new Error("Cannot create collection");
   
-        // Set the active collection to the newly created one
-        if (updatedCollections.includes(name)) {
-          setActiveCollection(name);
-          setActiveCollectionOnMap(name);
-        }
-      }
+      const newCollection = await res.json();
+  
+      // Add new collection to state immediately
+      setCollections(prev => [...prev, newCollection.name]);
+  
+      // Set as active collection
+      setActiveCollection(newCollection.name);
+      setActiveCollectionOnMap(newCollection.name);
+  
+      // Initialize empty events array for this collection
+      setEvents([]);
     } catch (err) {
       console.error("Erreur création collection:", err);
     }
   };
+  
   
 
   // Delete collection
