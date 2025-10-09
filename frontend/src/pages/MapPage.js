@@ -41,7 +41,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
           );
           const data = await res.json();
           setUserAddress(data.display_name || null);
-        } catch {}
+        } catch { }
       },
       (err) => {
         alert("Impossible de récupérer votre position : " + err.message);
@@ -117,7 +117,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           const query = encodeURIComponent(ev.title);
           const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
           if (res.ok && res.url) imageUrl = res.url;
-        } catch {}
+        } catch { }
       }
       setCache(cacheKey, imageUrl, CACHE_TTL);
       updatedImages[ev.id] = imageUrl;
@@ -241,10 +241,10 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
               <Marker
                 key={e.id}
                 position={[e.latitude, e.longitude]}
-                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(index + 1, e.type)}
+                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(e.position || index + 1, e.type)}
               >
                 <Popup minWidth={250}>
-                  <strong>{index + 1}. {e.title}</strong>
+                  <strong>{(e.position || index + 1)}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
