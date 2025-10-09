@@ -99,14 +99,19 @@ app.get("/collections", authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 app.post("/collections", authMiddleware, adminMiddleware, async (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: "name required" });
   try {
-    await pool.query(`INSERT INTO collections (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [name]);
-    res.json({ success: true, name });
+    const { name } = req.body;
+    const result = await pool.query(
+      `INSERT INTO collections (name) VALUES ($1) RETURNING *`,
+      [name]
+    );
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error("Create collection error:", err);
-    res.status(500).json({ error: "DB insert error" });
+    if (err.code === "23505") { // unique violation
+      return res.status(400).json({ error: "Collection already exists" });
+    }
+    console.error(err);
+    res.status(500).json({ error: "DB error" });
   }
 });
 
