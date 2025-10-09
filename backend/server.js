@@ -131,7 +131,7 @@ app.delete("/collections/:name", authMiddleware, adminMiddleware, async (req, re
 //   ACTIVATE COLLECTION FOR ALL USERS
 // =========================
 app.post("/collections/activate", authMiddleware, adminMiddleware, async (req, res) => {
-  const { collection } = req.body;
+  const collection = req.body.collection || req.body.name; // fallback
   if (!collection) return res.status(400).json({ error: "collection required" });
   try {
     await pool.query(
@@ -147,9 +147,12 @@ app.post("/collections/activate", authMiddleware, adminMiddleware, async (req, r
   }
 });
 
+
 app.get("/collections/active", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT collection_name FROM active_collection WHERE id=1`);
+    const result = await pool.query(
+      `SELECT collection_name FROM active_collection WHERE id=1`
+    );
     const active = result.rows.length ? result.rows[0].collection_name : "Default";
     res.json({ activeCollection: active });
   } catch (err) {
