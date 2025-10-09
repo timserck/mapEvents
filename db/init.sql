@@ -1,60 +1,67 @@
--- =========================
--- 1. Ensure PostGIS is enabled
--- =========================
+-- ===============================
+-- Extensions
+-- ===============================
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
--- =========================
--- 2. Create collections table if missing
--- =========================
+-- ===============================
+-- Collections table
+-- ===============================
 CREATE TABLE IF NOT EXISTS collections (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- =========================
--- 3. Add collection_id column if missing
--- =========================
-ALTER TABLE events ADD COLUMN IF NOT EXISTS collection_id INT;
-
--- =========================
--- 4. Ensure 'Default' collection exists
--- =========================
+-- Default collection
 INSERT INTO collections (name)
 VALUES ('Default')
 ON CONFLICT (name) DO NOTHING;
 
--- =========================
--- 5. Link existing events to 'Default' collection
--- =========================
-UPDATE events
-SET collection_id = (SELECT id FROM collections WHERE name = 'Default')
-WHERE collection_id IS NULL;
+-- ===============================
+-- Events table
+-- ===============================
+CREATE TABLE IF NOT EXISTS events (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    type VARCHAR(100),
+    date DATE NOT NULL,
+    description TEXT,
+    address TEXT,
+    location GEOGRAPHY(POINT, 4326) NOT NULL,
+    position INT DEFAULT 0,
+    collection_id INT NOT NULL REFERENCES collections(id) ON DELETE CASCADE
+);
 
--- =========================
--- 6. Add foreign key constraint if not exists
--- =========================
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_collection'
-    ) THEN
-        ALTER TABLE events
-          ADD CONSTRAINT fk_collection
-          FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE;
-    END IF;
-END$$;
+-- Sample event
+INSERT INTO events (title, type, date, description, address, location, position, collection_id)
+VALUES (
+    'Concert de Jazz',
+    'Concert',
+    CURRENT_DATE + INTERVAL '7 days',
+    'Concert en plein air au centre-ville',
+    'Paris, France',
+    ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)'),
+    1,
+    (SELECT id FROM collections WHERE name='Default')
+)
+ON CONFLICT DO NOTHING;
 
--- =========================
--- 7. Optional: Create default admin user (password: "password")
--- =========================
+-- ===============================
+-- Users table
+-- ===============================
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role VARCHAR(20) NOT NULL
+);
+
+-- Admin user (password: password)
 INSERT INTO users (username, password_hash, role)
 VALUES (
     'admin',
-    '$2b$10$lMwzskQjgQjBT39rTjUpueMZ4AC9KXaPJuHQg.YTXh7aEIFcDuRo.',
+    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'admin'
 )
 ON CONFLICT (username) DO NOTHING;
