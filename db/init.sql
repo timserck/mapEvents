@@ -38,7 +38,8 @@ VALUES (
     ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)'),
     1,
     (SELECT id FROM collections WHERE name = 'Default')
-);
+)
+ON CONFLICT DO NOTHING;
 
 -- Table des utilisateurs
 CREATE TABLE IF NOT EXISTS users (
@@ -57,20 +58,25 @@ VALUES (
 )
 ON CONFLICT (username) DO NOTHING;
 
-
--- Étape 1 : Créer la collection par défaut
-INSERT INTO collections (name) VALUES ('Default') ON CONFLICT (name) DO NOTHING;
-
--- Étape 2 : Ajouter la colonne collection_id si elle n'existe pas
+-- Étape 1 : Ajouter la colonne collection_id si elle n'existe pas
 ALTER TABLE events ADD COLUMN IF NOT EXISTS collection_id INT;
 
--- Étape 3 : Mettre à jour tous les événements pour les rattacher à la collection Default
+-- Étape 2 : Mettre à jour tous les événements pour les rattacher à la collection Default
 UPDATE events
 SET collection_id = (SELECT id FROM collections WHERE name = 'Default')
 WHERE collection_id IS NULL;
 
--- Étape 4 : Ajouter la contrainte de clé étrangère
-ALTER TABLE events
-  ADD CONSTRAINT fk_collection
-  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE;
+-- Étape 3 : Supprimer l'ancienne colonne collection si elle existe
+ALTER TABLE events DROP COLUMN IF EXISTS collection;
 
+-- Étape 4 : Ajouter la contrainte de clé étrangère si elle n'existe pas
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_collection'
+    ) THEN
+        ALTER TABLE events
+        ADD CONSTRAINT fk_collection
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE;
+    END IF;
+END$$;
