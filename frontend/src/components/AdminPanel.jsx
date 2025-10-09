@@ -7,7 +7,6 @@ import { getTypeColor } from "../leaflet";
 export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollectionOnMap }) {
   const { token } = useAuth();
   const [events, setEvents] = useState([]);
-
   const [collections, setCollections] = useState([]);
   const [activeCollection, setActiveCollection] = useState("");
 
@@ -23,7 +22,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const [bulkJson, setBulkJson] = useState("");
   const [message, setMessage] = useState("");
 
-  // 📁 Fetch collections
+  // Fetch collections
   const fetchCollections = async () => {
     try {
       const res = await fetch(`${API_URL}/collections`, {
@@ -42,7 +41,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   useEffect(() => { fetchCollections(); }, []);
 
-  // 📍 Fetch events
+  // Fetch events
   const fetchAllEvents = async () => {
     if (!activeCollection) {
       setEvents([]);
@@ -56,15 +55,12 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   useEffect(() => { fetchAllEvents(); }, [activeCollection, refreshEvents]);
 
-  // 🆕 Create a collection
+  // Create collection
   const createCollection = async (name) => {
     try {
       const res = await fetch(`${API_URL}/collections`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name })
       });
       if (res.ok) {
@@ -77,7 +73,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     }
   };
 
-  // 🗑 Delete collection
+  // Delete collection
   const deleteCollection = async (name) => {
     if (!confirm(`Supprimer la collection "${name}" ?`)) return;
     await fetch(`${API_URL}/collections/${encodeURIComponent(name)}`, {
@@ -90,7 +86,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     setEvents([]);
   };
 
-  // ✏️ Start editing
+  // Start editing
   const startEditing = (e) => {
     setEditingEvent(e);
     setTitle(e.title);
@@ -109,17 +105,15 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     setLatitude(null); setLongitude(null);
   };
 
-  // 💾 Submit create / edit
+  // Submit create/edit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!activeCollection) {
-      alert("Sélectionnez ou créez une collection d'abord.");
-      return;
-    }
+    if (!activeCollection) { alert("Sélectionnez ou créez une collection d'abord."); return; }
 
     let finalLat = latitude;
     let finalLon = longitude;
 
+    // Geocode if lat/lon missing or address changed
     if ((!finalLat || !finalLon) || (editingEvent && editingEvent.address !== address)) {
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
@@ -128,9 +122,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
           finalLat = data.features[0].geometry.coordinates[1];
           finalLon = data.features[0].geometry.coordinates[0];
         }
-      } catch (err) {
-        console.error("Géocodage:", err);
-      }
+      } catch (err) { console.error("Géocodage:", err); }
     }
 
     const url = editingEvent ? `${API_URL}/events/${editingEvent.id}` : `${API_URL}/events`;
@@ -151,14 +143,14 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     refreshEvents();
   };
 
-  // 🗑 Delete event
+  // Delete event
   const handleDelete = async (id) => {
     await fetch(`${API_URL}/events/${id}`, { method:"DELETE", headers:{Authorization:`Bearer ${token}`} });
     fetchAllEvents();
     refreshEvents();
   };
 
-  // 🗑 Delete all events in collection
+  // Delete all events in collection
   const deleteAllEvents = async () => {
     if (!confirm(`⚠️ Supprimer tous les événements de la collection "${activeCollection}" ?`)) return;
     await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`, {
@@ -168,16 +160,13 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     refreshEvents();
   };
 
-  // 📥 Bulk import
+  // Bulk import
   const handleBulkImport = async () => {
     try {
       const eventsArray = JSON.parse(bulkJson);
       const res = await fetch(`${API_URL}/events/bulk`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ events: eventsArray, collection: activeCollection })
       });
 
@@ -191,13 +180,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setBulkJson("");
       fetchAllEvents();
       refreshEvents();
-    } catch (err) {
-      console.error("Erreur import JSON:", err);
-      setMessage("❌ Format JSON invalide");
-    }
+    } catch (err) { console.error("Erreur import JSON:", err); setMessage("❌ Format JSON invalide"); }
   };
 
-  // 🪄 Drag & drop reorder
+  // Drag & drop reorder
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
     const items = Array.from(events);
@@ -218,42 +204,26 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     <div className="w-full h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
-      {/* 📂 Collections */}
+      {/* Collections */}
       <div className="mb-4 flex items-center gap-2">
         <select
           value={activeCollection}
-          onChange={(e) => {
-            setActiveCollection(e.target.value);
-            setActiveCollectionOnMap(e.target.value);
-          }}
+          onChange={(e) => { setActiveCollection(e.target.value); setActiveCollectionOnMap(e.target.value); }}
           className="border p-2 rounded"
         >
-          {collections.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
+          {collections.map(c => (<option key={c} value={c}>{c}</option>))}
         </select>
 
-        <button
-          onClick={() => {
-            const name = prompt("Nom de la nouvelle collection");
-            if (name) createCollection(name);
-          }}
-          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-        >
-          ➕ Nouvelle
-        </button>
+        <button onClick={() => { const name = prompt("Nom de la nouvelle collection"); if (name) createCollection(name); }}
+          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">➕ Nouvelle</button>
 
         {activeCollection && (
-          <button
-            onClick={() => deleteCollection(activeCollection)}
-            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-          >
-            🗑 Supprimer
-          </button>
+          <button onClick={() => deleteCollection(activeCollection)}
+            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">🗑 Supprimer</button>
         )}
       </div>
 
-      {/* 📝 Formulaire */}
+      {/* Form */}
       <form onSubmit={handleSubmit} className="mb-4 p-2 border rounded bg-white">
         <h3 className="font-semibold mb-2">{editingEvent ? "Éditer l'événement" : "Ajouter un événement"}</h3>
         <div className="flex flex-col md:flex-row gap-2">
@@ -269,25 +239,17 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </div>
       </form>
 
-      {/* 📥 Bulk JSON import */}
+      {/* Bulk import */}
       <div className="border p-3 rounded shadow bg-white">
         <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
-        <textarea
-          value={bulkJson}
-          onChange={e => setBulkJson(e.target.value)}
+        <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)}
           placeholder='[{"title":"Event 1","type":"concert","date":"2025-10-01","address":"Paris"}]'
-          className="w-full h-40 p-2 border rounded font-mono text-sm"
-        />
-        <button
-          onClick={handleBulkImport}
-          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Importer
-        </button>
+          className="w-full h-40 p-2 border rounded font-mono text-sm"/>
+        <button onClick={handleBulkImport} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Importer</button>
         {message && <p className="mt-2 text-sm">{message}</p>}
       </div>
 
-      {/* 📋 Events Table */}
+      {/* Events Table */}
       <h3 className="text-lg font-semibold mt-6">📋 Liste des événements</h3>
       <div className="overflow-x-auto min-h-[400px]">
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -335,7 +297,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </DragDropContext>
       </div>
 
-      {/* 🗑 Delete all */}
+      {/* Delete all events */}
       {activeCollection && (
         <div className="w-full p-4">
           <button onClick={deleteAllEvents} className="bg-red-600 text-white px-4 py-2 mt-2 rounded hover:bg-red-700 w-full transition">
