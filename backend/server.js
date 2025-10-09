@@ -83,41 +83,39 @@ app.post("/auth/login", async (req, res) => {
 // =========================
 //     COLLECTIONS API
 // =========================
-// GET all collections
 app.get("/collections", authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT name FROM collections ORDER BY name ASC`);
-    res.json(result.rows.map(r => r.name));
+    const result = await pool.query(`
+      SELECT DISTINCT c.name AS collection
+      FROM events e
+      JOIN collections c ON e.collection_id = c.id
+      ORDER BY c.name ASC
+    `);
+    res.json(result.rows.map(r => r.collection));
   } catch (err) {
     console.error("Fetch collections error:", err);
     res.status(500).json({ error: "DB fetch error" });
   }
 });
 
-// POST create a new collection
 app.post("/collections", authMiddleware, adminMiddleware, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "name required" });
   try {
-    const result = await pool.query(
-      `INSERT INTO collections (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING name`,
-      [name]
-    );
-    if (!result.rows.length) return res.status(400).json({ error: "Collection already exists" });
-    res.json({ success: true, name: result.rows[0].name });
+    await pool.query(`INSERT INTO collections (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [name]);
+    res.json({ success: true, name });
   } catch (err) {
     console.error("Create collection error:", err);
     res.status(500).json({ error: "DB insert error" });
   }
 });
 
-// DELETE a collection
 app.delete("/collections/:name", authMiddleware, adminMiddleware, async (req, res) => {
-  const name = decodeURIComponent(req.params.name);
   try {
-    const result = await pool.query(`DELETE FROM collections WHERE name=$1 RETURNING name`, [name]);
-    if (!result.rows.length) return res.status(404).json({ error: "Collection not found" });
-    res.json({ success: true, name: result.rows[0].name });
+    const name = decodeURIComponent(req.params.name);
+    await pool.query("DELETE FROM events WHERE collection_id = (SELECT id FROM collections WHERE name=$1)", [name]);
+    await pool.query("DELETE FROM collections WHERE name=$1", [name]);
+    res.json({ success: true });
   } catch (err) {
     console.error("Delete collection error:", err);
     res.status(500).json({ error: "DB delete error" });
@@ -127,25 +125,19 @@ app.delete("/collections/:name", authMiddleware, adminMiddleware, async (req, re
 // =========================
 //        EVENTS API
 // =========================
-// GET events (optionally by collection name)
 app.get("/events", async (req, res) => {
   try {
-    const collectionName = req.query.collection || "Default";
-
-    // Get collection_id
-    const collRes = await pool.query(`SELECT id FROM collections WHERE name=$1`, [collectionName]);
-    if (!collRes.rows.length) return res.status(404).json({ error: "Collection not found" });
-    const collection_id = collRes.rows[0].id;
-
+    const collection = req.query.collection || "Default";
     const result = await pool.query(`
-      SELECT id, title, type, date, description, address, position,
-             ST_Y(location::geometry) AS latitude,
-             ST_X(location::geometry) AS longitude
-      FROM events
-      WHERE collection_id=$1
-      ORDER BY position ASC
-    `, [collection_id]);
-
+      SELECT e.id, e.title, e.type, e.date, e.description, e.address, e.position, 
+             ST_Y(e.location::geometry) AS latitude,
+             ST_X(e.location::geometry) AS longitude,
+             c.name AS collection
+      FROM events e
+      JOIN collections c ON e.collection_id = c.id
+      WHERE c.name = $1
+      ORDER BY e.position ASC
+    `, [collection]);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch events error:", err);
@@ -153,157 +145,124 @@ app.get("/events", async (req, res) => {
   }
 });
 
-// POST new event
 app.post("/events", authMiddleware, adminMiddleware, async (req, res) => {
+  let { title, type, date, latitude, longitude, description, address, position, collection } = req.body;
+  if (!collection) collection = "Default";
   try {
-    let { title, type, date, address, latitude, longitude, description, position, collection } = req.body;
-    if (!collection) collection = "Default";
     if (!title || !type || !date || !address) return res.status(400).json({ error: "title,type,date,address required" });
-
-    // Get collection_id
-    const collRes = await pool.query(`SELECT id FROM collections WHERE name=$1`, [collection]);
-    if (!collRes.rows.length) return res.status(404).json({ error: "Collection not found" });
-    const collection_id = collRes.rows[0].id;
-
     if (date.includes("T")) date = date.split("T")[0];
     if (!latitude || !longitude) {
       const geo = await geocodeAddress(address);
       if (!geo) return res.status(400).json({ error: "Cannot geocode address" });
-      latitude = geo.latitude;
-      longitude = geo.longitude;
+      latitude = geo.latitude; longitude = geo.longitude;
     }
-
     if (!position) {
-      const posRes = await pool.query("SELECT COALESCE(MAX(position),0)+1 AS next FROM events WHERE collection_id=$1", [collection_id]);
+      const posRes = await pool.query(
+        "SELECT COALESCE(MAX(position),0)+1 AS next FROM events WHERE collection_id=(SELECT id FROM collections WHERE name=$1)",
+        [collection]
+      );
       position = posRes.rows[0].next;
     }
-
-    const result = await pool.query(`
-      INSERT INTO events (title, type, date, description, address, location, position, collection_id)
-      VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,$8)
-      RETURNING id, title, type, date, description, address, position,
-                ST_Y(location::geometry) AS latitude,
-                ST_X(location::geometry) AS longitude
-    `, [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, position, collection_id]);
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Insert event error:", err);
-    res.status(500).json({ error: "DB insert error" });
-  }
+    const result = await pool.query(
+      `INSERT INTO events (title,type,date,description,address,location,position,collection_id)
+       VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,(SELECT id FROM collections WHERE name=$8))
+       RETURNING id,title,type,date,description,address,position,
+                 ST_Y(location::geometry) AS latitude,
+                 ST_X(location::geometry) AS longitude`,
+      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, position, collection]
+    );
+    res.json({ ...result.rows[0], collection });
+  } catch (err) { console.error(err); res.status(500).json({ error: "DB insert error" }); }
 });
 
-
-// PUT update event
 app.put("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  const { id } = req.params;
+  let { title, type, date, description, address, latitude, longitude, collection } = req.body;
+  if (!collection) collection = "Default";
   try {
-    const { id } = req.params;
-    let { title, type, date, description, address, latitude, longitude, collection } = req.body;
-    if (!collection) collection = "Default";
-
-    // Get collection_id
-    const collRes = await pool.query(`SELECT id FROM collections WHERE name=$1`, [collection]);
-    if (!collRes.rows.length) return res.status(404).json({ error: "Collection not found" });
-    const collection_id = collRes.rows[0].id;
-
     if (!title || !type || !date || !address) return res.status(400).json({ error: "title,type,date,address required" });
     if (date.includes("T")) date = date.split("T")[0];
     if (!latitude || !longitude) {
       const geo = await geocodeAddress(address);
       if (!geo) return res.status(400).json({ error: "Cannot geocode address" });
-      latitude = geo.latitude;
-      longitude = geo.longitude;
+      latitude = geo.latitude; longitude = geo.longitude;
     }
-
-    const result = await pool.query(`
-      UPDATE events
-      SET title=$1, type=$2, date=$3, description=$4, address=$5,
-          location=ST_GeogFromText($6), collection_id=$7
-      WHERE id=$8
-      RETURNING id, title, type, date, description, address, position,
-                ST_Y(location::geometry) AS latitude,
-                ST_X(location::geometry) AS longitude
-    `, [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, collection_id, id]);
-
+    const result = await pool.query(
+      `UPDATE events
+       SET title=$1,type=$2,date=$3,description=$4,address=$5,
+           location=ST_GeogFromText($6),
+           collection_id=(SELECT id FROM collections WHERE name=$7)
+       WHERE id=$8
+       RETURNING id,title,type,date,description,address,position,
+                 ST_Y(location::geometry) AS latitude,
+                 ST_X(location::geometry) AS longitude`,
+      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, collection, id]
+    );
     if (!result.rows.length) return res.status(404).json({ error: "Event not found" });
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Update event error:", err);
-    res.status(500).json({ error: "DB update error" });
-  }
+    res.json({ ...result.rows[0], collection });
+  } catch (err) { console.error(err); res.status(500).json({ error: "DB update error" }); }
 });
 
-
 app.delete("/events/:id", authMiddleware, adminMiddleware, async (req, res) => {
-  try { await pool.query("DELETE FROM events WHERE id=$1", [req.params.id]); res.json({ success: true }); }
-  catch (err) { console.error(err); res.status(500).json({ error: "DB delete error" }); }
+  try {
+    await pool.query("DELETE FROM events WHERE id=$1", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: "DB delete error" }); }
 });
 
 app.post("/events/bulk", authMiddleware, adminMiddleware, async (req, res) => {
   const { events, collection } = req.body;
-  if (!Array.isArray(events) || !events.length) return res.status(400).json({ error: "Events array required" });
-
   const collectionName = collection || "Default";
-
+  if (!Array.isArray(events) || !events.length) return res.status(400).json({ error: "Events array required" });
   try {
-    // Get collection_id
-    const collRes = await pool.query(`SELECT id FROM collections WHERE name=$1`, [collectionName]);
-    if (!collRes.rows.length) return res.status(404).json({ error: "Collection not found" });
-    const collection_id = collRes.rows[0].id;
-
     const inserted = [];
-
     for (let ev of events) {
       let { title, type, date, address, description, latitude, longitude } = ev;
-      if (!title || !type || !date || !address) continue; // skip invalid events
-
-      if (date.includes("T")) date = date.split("T")[0];
-
-      if (!latitude || !longitude) {
+      if (address && (!latitude || !longitude)) {
         const geo = await geocodeAddress(address);
-        if (!geo) { console.error("Cannot geocode:", address); continue; }
-        latitude = geo.latitude;
-        longitude = geo.longitude;
+        if (geo) { latitude = geo.latitude; longitude = geo.longitude; }
       }
-
       const result = await pool.query(
-        `INSERT INTO events (title, type, date, description, address, location, collection_id)
-         VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7)
-         RETURNING id, title, type, date, description, address,
+        `INSERT INTO events (title,type,date,description,address,location,collection_id)
+         VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),(SELECT id FROM collections WHERE name=$7))
+         RETURNING id,title,type,date,description,address,position,
                    ST_Y(location::geometry) AS latitude,
                    ST_X(location::geometry) AS longitude`,
-        [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, collection_id]
+        [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, collectionName]
       );
-
-      inserted.push(result.rows[0]);
+      inserted.push({ ...result.rows[0], collection: collectionName });
     }
-
     res.json(inserted);
-  } catch (err) {
-    console.error("Bulk insert error:", err);
-    res.status(500).json({ error: "DB bulk insert error" });
-  }
+  } catch (err) { console.error(err); res.status(500).json({ error: "DB bulk insert error" }); }
 });
 
-
-app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req,res)=>{
+app.patch("/events/reorder", authMiddleware, adminMiddleware, async (req, res) => {
   const { orderedIds } = req.body;
-  if(!Array.isArray(orderedIds)||!orderedIds.length) return res.status(400).json({error:"orderedIds array required"});
+  if (!Array.isArray(orderedIds) || !orderedIds.length) return res.status(400).json({ error: "orderedIds array required" });
   try {
     await pool.query("BEGIN");
     for (let i = 0; i < orderedIds.length; i++) {
-      const id = orderedIds[i];
-      const position = i + 1;
-      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [position, id]);
+      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [i + 1, orderedIds[i]]);
     }
     await pool.query("COMMIT");
     res.json({ success: true, message: "Events reordered successfully" });
-  } catch (err) {
-    await pool.query("ROLLBACK");
-    console.error("Reorder error:", err);
-    res.status(500).json({ error: "DB reorder error" });
-  }
+  } catch (err) { await pool.query("ROLLBACK"); console.error(err); res.status(500).json({ error: "DB reorder error" }); }
 });
 
-// --- Start Server ---
-app.listen(4000, "0.0.0.0", ()=>console.log("🚀 Server running on port 4000 with collections"));
+// =========================
+//      DELETE ALL EVENTS IN COLLECTION
+// =========================
+app.delete("/events", authMiddleware, adminMiddleware, async (req, res) => {
+  const { collection } = req.query;
+  if (!collection) return res.status(400).json({ error: "collection query required" });
+  try {
+    await pool.query("DELETE FROM events WHERE collection_id=(SELECT id FROM collections WHERE name=$1)", [collection]);
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: "DB delete all error" }); }
+});
+
+// =========================
+//     SERVER START
+// =========================
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
