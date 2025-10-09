@@ -130,12 +130,12 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   const resetForm = () => {
     setEditingEvent(null);
-    setTitle(""); 
-    setType(""); 
+    setTitle("");
+    setType("");
     setDate("");
-    setDescription(""); 
+    setDescription("");
     setAddress("");
-    setLatitude(null); 
+    setLatitude(null);
     setLongitude(null);
   };
 
@@ -164,8 +164,8 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
     await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json", Authorization:`Bearer ${token}` },
-      body: JSON.stringify({ 
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
         title, type, date, description, address,
         latitude: finalLat, longitude: finalLon,
         position: editingEvent?.position || events.length + 1,
@@ -180,7 +180,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   // Delete event
   const handleDelete = async (id) => {
-    await fetch(`${API_URL}/events/${id}`, { method:"DELETE", headers:{Authorization:`Bearer ${token}`} });
+    await fetch(`${API_URL}/events/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     fetchAllEvents();
     refreshEvents();
   };
@@ -189,7 +189,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const deleteAllEvents = async () => {
     if (!confirm(`⚠️ Supprimer tous les événements de la collection "${activeCollection}" ?`)) return;
     await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`, {
-      method:"DELETE", headers:{Authorization:`Bearer ${token}`}
+      method: "DELETE", headers: { Authorization: `Bearer ${token}` }
     });
     fetchAllEvents();
     refreshEvents();
@@ -215,9 +215,9 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setBulkJson("");
       fetchAllEvents();
       refreshEvents();
-    } catch (err) { 
-      console.error("Erreur import JSON:", err); 
-      setMessage("❌ Format JSON invalide"); 
+    } catch (err) {
+      console.error("Erreur import JSON:", err);
+      setMessage("❌ Format JSON invalide");
     }
   };
 
@@ -230,8 +230,8 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     setEvents(items);
 
     await fetch(`${API_URL}/events/reorder`, {
-      method:"PATCH",
-      headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ orderedIds: items.map((e) => e.id), collection: activeCollection })
     });
 
@@ -253,7 +253,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
           {collections.map(c => (<option key={c} value={c}>{c}</option>))}
         </select>
 
-        <button 
+        <button
           onClick={() => { const name = prompt("Nom de la nouvelle collection"); if (name) createCollection(name); }}
           className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
         >
@@ -261,7 +261,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </button>
 
         {activeCollection && (
-          <button 
+          <button
             onClick={() => deleteCollection(activeCollection)}
             className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
           >
@@ -274,12 +274,12 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       <form onSubmit={handleSubmit} className="mb-4 p-2 border rounded bg-white">
         <h3 className="font-semibold mb-2">{editingEvent ? "Éditer l'événement" : "Ajouter un événement"}</h3>
         <div className="flex flex-col md:flex-row gap-2">
-          <input type="text" placeholder="Titre" value={title} onChange={e=>setTitle(e.target.value)} className="border p-2 flex-1"/>
-          <input type="text" placeholder="Type" value={type} onChange={e=>setType(e.target.value)} className="border p-2 flex-1"/>
-          <input type="date" placeholder="Date" value={date} onChange={e=>setDate(e.target.value)} className="border p-2 flex-1"/>
+          <input type="text" placeholder="Titre" value={title} onChange={e => setTitle(e.target.value)} className="border p-2 flex-1" />
+          <input type="text" placeholder="Type" value={type} onChange={e => setType(e.target.value)} className="border p-2 flex-1" />
+          <input type="date" placeholder="Date" value={date} onChange={e => setDate(e.target.value)} className="border p-2 flex-1" />
         </div>
-        <input type="text" placeholder="Adresse" value={address} onChange={e=>setAddress(e.target.value)} className="border p-2 mt-2 w-full"/>
-        <textarea placeholder="Description" value={description} onChange={e=>setDescription(e.target.value)} className="border p-2 mt-2 w-full"/>
+        <input type="text" placeholder="Adresse" value={address} onChange={e => setAddress(e.target.value)} className="border p-2 mt-2 w-full" />
+        <textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} className="border p-2 mt-2 w-full" />
         <div className="flex gap-2 mt-2">
           <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">{editingEvent ? "Mettre à jour" : "Ajouter"}</button>
           {editingEvent && <button type="button" onClick={resetForm} className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Annuler</button>}
@@ -291,7 +291,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
         <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)}
           placeholder='[{"title":"Concert de Jazz","type":"Concert","date":"2025-10-16","description":"...","address":"Paris, France"}]'
-          className="w-full h-40 p-2 border rounded font-mono text-sm"/>
+          className="w-full h-40 p-2 border rounded font-mono text-sm" />
         <button onClick={handleBulkImport} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Importer</button>
         {message && <p className="mt-2 text-sm">{message}</p>}
       </div>
@@ -301,7 +301,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       <div className="overflow-x-auto min-h-[400px]">
         <DragDropContext onDragEnd={handleDragEnd}>
           <Droppable droppableId="events">
-            {(provided)=>(
+            {(provided) => (
               <table className="min-w-[600px] w-full border mt-2 text-sm" {...provided.droppableProps} ref={provided.innerRef}>
                 <thead>
                   <tr className="bg-gray-200">
@@ -315,22 +315,22 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map((e,index)=>(
+                  {events.map((e, index) => (
                     <Draggable key={e.id} draggableId={e.id.toString()} index={index}>
-                      {(provided)=>(
+                      {(provided) => (
                         <tr ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                          <td className="border p-2">{e.position || index+1}</td>
+                          <td className="border p-2">{e.position || index + 1}</td>
                           <td className="border p-2">{e.title}</td>
                           <td className="border p-2">{e.type}</td>
                           <td className="border p-2 text-center">
-                            <div style={{backgroundColor:getTypeColor(e.type),width:"22px",height:"22px",borderRadius:"50%",margin:"auto",border:"1px solid #999"}}/>
+                            <div style={{ backgroundColor: getTypeColor(e.type), width: "22px", height: "22px", borderRadius: "50%", margin: "auto", border: "1px solid #999" }} />
                           </td>
                           <td className="border p-2">{new Date(e.date).toLocaleDateString("fr-FR")}</td>
                           <td className="border p-2">{e.address}</td>
                           <td className="border p-2 flex gap-2">
-                            <button onClick={()=>goToEvent(e)} className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">Go To</button>
-                            <button onClick={()=>startEditing(e)} className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600">Éditer</button>
-                            <button onClick={()=>handleDelete(e.id)} className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Supprimer</button>
+                            <button onClick={() => goToEvent(e)} className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">Go To</button>
+                            <button onClick={() => startEditing(e)} className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600">Éditer</button>
+                            <button onClick={() => handleDelete(e.id)} className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Supprimer</button>
                           </td>
                         </tr>
                       )}
@@ -343,6 +343,26 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
           </Droppable>
         </DragDropContext>
       </div>
+
+      {activeCollection && (
+        <button
+          onClick={async () => {
+            try {
+              await fetch(`${API_URL}/public-collection`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: activeCollection }),
+              });
+              alert(`✅ La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
+            } catch (err) {
+              console.error("Erreur pour définir la collection publique :", err);
+            }
+          }}
+          className="bg-blue-600 text-white px-3 py-1 rounded mt-2 w-full"
+        >
+          Activer cette collection pour tous
+        </button>
+      )}
 
       {/* Delete all events */}
       {activeCollection && (
