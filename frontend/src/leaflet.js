@@ -54,8 +54,8 @@ export function createNumberedIcon(number, type = "default") {
 
 export const myPositionIcon = L.icon({
   iconUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
 });
 
 
