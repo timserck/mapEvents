@@ -107,9 +107,9 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
       try {
         const res = await fetch(`${API_URL}/collections/active`);
         const data = await res.json();
-        if (data?.name) {
-          setPublicCollection(data.name);
-          if (!isAdmin && !activeCollection) setActiveCollection(data.name);
+        if (data?.activeCollection) {
+          setPublicCollection(data.activeCollection);
+          if (!isAdmin && !activeCollection) setActiveCollection(data.activeCollection);
         }
       } catch (err) {
         console.error("Erreur fetch public collection:", err);
