@@ -350,7 +350,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       </div>
 
       {/* Set collection active for all users */}
-      {activeCollection && (
+      {activeCollection && token && (
         <button
           onClick={async () => {
             try {
