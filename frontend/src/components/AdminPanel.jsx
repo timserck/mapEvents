@@ -356,7 +356,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
             try {
               await fetch(`${API_URL}/collections/activate`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
                 body: JSON.stringify({ name: activeCollection }),
               });
               alert(`✅ La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
