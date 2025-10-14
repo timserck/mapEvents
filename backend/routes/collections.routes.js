@@ -5,7 +5,7 @@ const { authMiddleware, adminMiddleware } = require("../middlewares/auth");
 const { getActiveCollection } = require("../utils/helpers");
 
 // --- GET all collections ---
-router.get("/", authMiddleware, adminMiddleware, async (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT DISTINCT c.name AS collection
