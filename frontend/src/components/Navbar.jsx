@@ -24,7 +24,7 @@ export default function Navbar({ togglePanel }) {
 
   return (
     <nav className="bg-gray-800 text-white relative z-[3000] flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
-      <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Carte des événements</div>
+      <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Map of events</div>
 
       {/* Desktop/Tablet controls */}
       <div className="hidden md:flex items-center gap-2 md:gap-3 flex-nowrap min-w-0 flex-1 justify-end">
