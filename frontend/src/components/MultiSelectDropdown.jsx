@@ -70,7 +70,7 @@ export default function MultiSelectDropdown({
         ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex justify-between items-center border rounded p-2 bg-white w-max sm:w-full"
+        className="flex justify-between items-center border rounded p-2 bg-white w-full"
       >
         <span>{displayText}</span>
         <svg
