@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export default function MultiSelectDropdown({
   options,
@@ -10,6 +11,7 @@ export default function MultiSelectDropdown({
   const [search, setSearch] = useState("");
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
+  const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -36,48 +38,34 @@ export default function MultiSelectDropdown({
 
   const isChecked = (option) => selected.includes(option);
 
-  // Filter options by search query
   const filteredOptions = options.filter((opt) =>
     opt.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Display only number of selected options
   const displayText =
     selected.includes("all")
       ? `${label}: Tous`
       : `${label}: ${selected.length} sélectionné${selected.length > 1 ? "s" : ""}`;
 
-  // Dynamically adjust button width to fit largest option
+  // Position the dropdown relative to the button
   useEffect(() => {
-    if (!buttonRef.current) return;
-    const tmp = document.createElement("span");
-    tmp.style.visibility = "hidden";
-    tmp.style.position = "absolute";
-    tmp.style.whiteSpace = "nowrap";
-    tmp.style.font = getComputedStyle(buttonRef.current).font;
-    document.body.appendChild(tmp);
-
-    let maxWidth = 0;
-    options.forEach((opt) => {
-      tmp.textContent = `${label}: ${opt}`;
-      const w = tmp.offsetWidth;
-      if (w > maxWidth) maxWidth = w;
-    });
-
-    tmp.remove();
-    buttonRef.current.style.width = `${maxWidth + 40}px`; // add padding
-  }, [options, label]);
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+  }, [isOpen]);
 
   return (
-    <div
-      className="relative inline-block text-left z-[4000]"
-      ref={dropdownRef}
-    >
+    <div className="relative inline-block text-left" ref={dropdownRef}>
       <button
         type="button"
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex justify-between items-center border rounded p-2 bg-white"
+        className="flex justify-between items-center border rounded p-2 bg-white w-max"
       >
         <span>{displayText}</span>
         <svg
@@ -90,33 +78,42 @@ export default function MultiSelectDropdown({
         </svg>
       </button>
 
-      {isOpen && (
-        <div className="absolute mt-1 w-max z-50 bg-white border rounded shadow-lg max-h-60 overflow-auto">
-          {/* Search Input */}
-          <input
-            type="text"
-            placeholder={`Rechercher ${label.toLowerCase()}...`}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full border-b p-2 outline-none"
-          />
-          {/* Options List */}
-          {filteredOptions.map((option) => (
-            <label
-              key={option}
-              className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={isChecked(option)}
-                onChange={() => toggleOption(option)}
-                className="mr-2"
-              />
-              {option === "all" ? "Tous les options" : option}
-            </label>
-          ))}
-        </div>
-      )}
+      {isOpen &&
+        createPortal(
+          <div
+            className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto"
+            style={{
+              top: dropdownCoords.top,
+              left: dropdownCoords.left,
+              width: dropdownCoords.width,
+            }}
+          >
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder={`Rechercher ${label.toLowerCase()}...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full border-b p-2 outline-none"
+            />
+            {/* Options List */}
+            {filteredOptions.map((option) => (
+              <label
+                key={option}
+                className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked(option)}
+                  onChange={() => toggleOption(option)}
+                  className="mr-2"
+                />
+                {option === "all" ? "Tous les options" : option}
+              </label>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
