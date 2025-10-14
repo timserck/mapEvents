@@ -1,9 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 
-export default function MultiSelectDropdown({ options, selected, setSelected, label = "Options" }) {
+export default function MultiSelectDropdown({
+  options,
+  selected,
+  setSelected,
+  label = "Options",
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -35,16 +41,45 @@ export default function MultiSelectDropdown({ options, selected, setSelected, la
     opt.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Display only number of selected options
+  const displayText =
+    selected.includes("all")
+      ? `${label}: Tous`
+      : `${label}: ${selected.length} sélectionné${selected.length > 1 ? "s" : ""}`;
+
+  // Dynamically adjust button width to fit largest option
+  useEffect(() => {
+    if (!buttonRef.current) return;
+    const tmp = document.createElement("span");
+    tmp.style.visibility = "hidden";
+    tmp.style.position = "absolute";
+    tmp.style.whiteSpace = "nowrap";
+    tmp.style.font = getComputedStyle(buttonRef.current).font;
+    document.body.appendChild(tmp);
+
+    let maxWidth = 0;
+    options.forEach((opt) => {
+      tmp.textContent = `${label}: ${opt}`;
+      const w = tmp.offsetWidth;
+      if (w > maxWidth) maxWidth = w;
+    });
+
+    tmp.remove();
+    buttonRef.current.style.width = `${maxWidth + 40}px`; // add padding
+  }, [options, label]);
+
   return (
-    <div className="relative inline-block text-left w-full z-[4000] md:w-auto" ref={dropdownRef}>
+    <div
+      className="relative inline-block text-left z-[4000]"
+      ref={dropdownRef}
+    >
       <button
         type="button"
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex justify-between items-center border rounded p-2 bg-white"
+        className="flex justify-between items-center border rounded p-2 bg-white"
       >
-        <span>
-          {selected.includes("all") ? `${label}: Tous` : `${label}: ${selected.join(", ")}`}
-        </span>
+        <span>{displayText}</span>
         <svg
           className={`w-4 h-4 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
@@ -56,7 +91,7 @@ export default function MultiSelectDropdown({ options, selected, setSelected, la
       </button>
 
       {isOpen && (
-        <div className="absolute mt-1 w-full z-50 bg-white border rounded shadow-lg max-h-60 overflow-auto">
+        <div className="absolute mt-1 w-max z-50 bg-white border rounded shadow-lg max-h-60 overflow-auto">
           {/* Search Input */}
           <input
             type="text"
