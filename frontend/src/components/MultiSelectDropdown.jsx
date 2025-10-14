@@ -10,6 +10,7 @@ export default function MultiSelectDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const buttonRef = useRef(null);
+  const dropdownRef = useRef(null); // NEW
   const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
 
   const toggleOption = (option) => {
@@ -34,10 +35,15 @@ export default function MultiSelectDropdown({
       ? `${label}: Tous`
       : `${label}: ${selected.length} sélectionné${selected.length > 1 ? "s" : ""}`;
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside BOTH button and dropdown
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target)) {
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
         setIsOpen(false);
         setSearch("");
       }
@@ -46,7 +52,7 @@ export default function MultiSelectDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Position the dropdown below button
+  // Position the dropdown
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
@@ -59,8 +65,9 @@ export default function MultiSelectDropdown({
   }, [isOpen]);
 
   return (
-    <div className="relative inline-block text-left w-full" ref={buttonRef}>
+    <div className="relative inline-block text-left w-full">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex justify-between items-center border rounded p-2 bg-white w-max sm:w-full"
@@ -79,11 +86,12 @@ export default function MultiSelectDropdown({
       {isOpen &&
         createPortal(
           <div
+            ref={dropdownRef} // NEW
             className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto sm:max-w-full"
             style={{
               top: dropdownCoords.top,
               left: dropdownCoords.left,
-              width: window.innerWidth < 640 ? "90%" : dropdownCoords.width, // full width on mobile
+              width: window.innerWidth < 640 ? "90%" : dropdownCoords.width,
               maxWidth: window.innerWidth < 640 ? "90%" : "auto",
             }}
           >
