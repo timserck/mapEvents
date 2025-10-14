@@ -87,7 +87,7 @@ export default function MultiSelectDropdown({
         createPortal(
           <div
             ref={dropdownRef} // NEW
-            className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto sm:max-w-full"
+            className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto w-full"
             style={{
               top: dropdownCoords.top,
               left: dropdownCoords.left,
