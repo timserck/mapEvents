@@ -36,7 +36,7 @@ export default function MultiSelectDropdown({ options, selected, setSelected, la
   );
 
   return (
-    <div className="relative inline-block text-left w-full z-400 md:w-auto" ref={dropdownRef}>
+    <div className="relative inline-block text-left w-full z-[4000] md:w-auto" ref={dropdownRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
