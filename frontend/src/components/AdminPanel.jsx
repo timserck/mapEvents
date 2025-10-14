@@ -248,19 +248,27 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
       {/* Collections */}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
         <select
           value={activeCollection}
-          onChange={(e) => { setActiveCollection(e.target.value); setActiveCollectionOnMap(e.target.value); }}
-          className="border p-2 rounded"
+          onChange={(e) => {
+            setActiveCollection(e.target.value);
+            setActiveCollectionOnMap(e.target.value);
+          }}
+          className="border p-2 rounded flex-1"
         >
           <option value="">-- Sélectionner une collection --</option>
-          {collections.map(c => (<option key={c} value={c}>{c}</option>))}
+          {collections.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
         </select>
 
         <button
-          onClick={() => { const name = prompt("Nom de la nouvelle collection"); if (name) createCollection(name); }}
-          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+          onClick={() => {
+            const name = prompt("Nom de la nouvelle collection");
+            if (name) createCollection(name);
+          }}
+          className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 w-full sm:w-auto"
         >
           ➕ Nouvelle
         </button>
@@ -268,12 +276,13 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         {activeCollection && (
           <button
             onClick={() => deleteCollection(activeCollection)}
-            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+            className="bg-red-600 text-white px-3 py-2 rounded hover:bg-red-700 w-full sm:w-auto"
           >
             🗑 Supprimer
           </button>
         )}
       </div>
+
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="mb-4 p-2 border rounded bg-white">
