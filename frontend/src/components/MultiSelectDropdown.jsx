@@ -9,21 +9,8 @@ export default function MultiSelectDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
   const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setIsOpen(false);
-        setSearch(""); // reset search on close
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const toggleOption = (option) => {
     if (option === "all") {
@@ -47,7 +34,19 @@ export default function MultiSelectDropdown({
       ? `${label}: Tous`
       : `${label}: ${selected.length} sélectionné${selected.length > 1 ? "s" : ""}`;
 
-  // Position the dropdown relative to the button
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (buttonRef.current && !buttonRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Position the dropdown below button
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
@@ -60,12 +59,11 @@ export default function MultiSelectDropdown({
   }, [isOpen]);
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div className="relative inline-block text-left w-full" ref={buttonRef}>
       <button
         type="button"
-        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex justify-between items-center border rounded p-2 bg-white w-max"
+        className="flex justify-between items-center border rounded p-2 bg-white w-max sm:w-full"
       >
         <span>{displayText}</span>
         <svg
@@ -81,14 +79,14 @@ export default function MultiSelectDropdown({
       {isOpen &&
         createPortal(
           <div
-            className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto"
+            className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto sm:max-w-full"
             style={{
               top: dropdownCoords.top,
               left: dropdownCoords.left,
-              width: dropdownCoords.width,
+              width: window.innerWidth < 640 ? "90%" : dropdownCoords.width, // full width on mobile
+              maxWidth: window.innerWidth < 640 ? "90%" : "auto",
             }}
           >
-            {/* Search Input */}
             <input
               type="text"
               placeholder={`Rechercher ${label.toLowerCase()}...`}
@@ -96,7 +94,6 @@ export default function MultiSelectDropdown({
               onChange={(e) => setSearch(e.target.value)}
               className="w-full border-b p-2 outline-none"
             />
-            {/* Options List */}
             {filteredOptions.map((option) => (
               <label
                 key={option}
