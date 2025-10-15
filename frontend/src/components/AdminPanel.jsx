@@ -302,7 +302,16 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
       {/* Bulk import */}
       <div className="border p-3 rounded shadow bg-white">
-        <h3 className="font-semibold mb-2">📥 Importer des événements en JSON</h3>
+
+        <h3 className="font-semibold mb-2">📥 Importer ou générer des événements</h3>
+
+        {/* 🧠 GPT Component */}
+        <GptEventGenerator
+          activeCollection={activeCollection}
+          setBulkJson={setBulkJson}
+          setMessage={setMessage}
+        />
+
         <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)}
           placeholder='[{"title":"Concert de Jazz","type":"Concert","date":"2025-10-16","description":"...","address":"Paris, France"}]'
           className="w-full h-40 p-2 border rounded font-mono text-sm" />
