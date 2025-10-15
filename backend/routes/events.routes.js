@@ -8,6 +8,69 @@ const {
   ensureLatLng
 } = require("../utils/helpers");
 
+
+// =========================
+//        GPT EVENTS
+// =========================
+router.post("/gpt-events", authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const { prompt, collection } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    const system = "You are a helpful assistant that generates structured event data for travel apps. Output only valid JSON — no text or markdown.";
+    const userPrompt = `
+Generate a JSON object in this format:
+{
+  "title": "...",
+  "type": "...",
+  "date": "${new Date().toISOString()}",
+  "description": "...",
+  "address": "...",
+  "latitude": 0,
+  "longitude": 0,
+  "collection": "${collection || "Default"}"
+}
+The event is based on this description: "${prompt}".
+Fill title, type, description, address and realistic coordinates.
+`;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices.length) {
+      return res.status(500).json({ error: "No response from OpenAI" });
+    }
+
+    const content = data.choices[0].message.content.trim();
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (err) {
+      return res.status(500).json({ error: "Invalid JSON from GPT", raw: content });
+    }
+
+    res.json(parsed);
+  } catch (err) {
+    console.error("GPT proxy error:", err);
+    next(err);
+  }
+});
+
 // =========================
 //        GET EVENTS
 // =========================

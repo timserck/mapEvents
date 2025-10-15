@@ -28,27 +28,15 @@ Fill title, type, description, address and realistic coordinates.
 `;
 
     try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("/api/events/gpt-events", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "gpt-4.1",
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: prompt }
-          ],
-          temperature: 0.7
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection })
       });
-
-      const data = await response.json();
-      const content = data.choices[0].message.content.trim();
-      const parsed = JSON.parse(content);
-
+      
+      const parsed = await response.json();
       setBulkJson(JSON.stringify([parsed], null, 2));
+
       setMessage("✅ JSON généré depuis GPT !");
     } catch (err) {
       console.error("Erreur GPT:", err);
