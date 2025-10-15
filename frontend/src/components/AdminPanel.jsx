@@ -3,6 +3,7 @@ import { useAuth } from "../AuthContext";
 import { API_URL } from "../config";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { getTypeColor } from "../leaflet";
+import GptEventGenerator from "../components/GptEventGenerator";
 
 export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollectionOnMap }) {
   const { token } = useAuth();
