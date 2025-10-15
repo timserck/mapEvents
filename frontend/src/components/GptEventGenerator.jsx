@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { API_URL } from "../config";
 
 export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
   const [gptPrompt, setGptPrompt] = useState("");
@@ -28,7 +29,7 @@ Fill title, type, description, address and realistic coordinates.
 `;
 
     try {
-      const response = await fetch("/api/events/gpt-events", {
+      const response = await fetch(`${API_URL}/events/gpt-events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection })
