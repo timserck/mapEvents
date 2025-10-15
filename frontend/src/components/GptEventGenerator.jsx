@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { API_URL } from "../config";
 
 export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
+  const { token } = useAuth();
   const [gptPrompt, setGptPrompt] = useState("");
   const [loadingGPT, setLoadingGPT] = useState(false);
 
