@@ -31,7 +31,10 @@ Fill title, type, description, address and realistic coordinates.
     try {
       const response = await fetch(`${API_URL}/events/gpt-events`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection })
       });
       
