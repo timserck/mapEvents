@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { API_URL } from "../config";
+import { useAuth } from "../AuthContext";
 
 export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
   const { token } = useAuth();
