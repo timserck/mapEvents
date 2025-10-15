@@ -18,8 +18,9 @@ router.post("/gpt-events", authMiddleware, adminMiddleware, async (req, res, nex
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
     const system = "You are a helpful assistant that generates structured event data for travel apps. Output only valid JSON — no text or markdown.";
+
     const userPrompt = `
-Generate a JSON object in this format:
+Generate a JSON object in this exact format:
 {
   "title": "...",
   "type": "...",
@@ -30,30 +31,57 @@ Generate a JSON object in this format:
   "longitude": 0,
   "collection": "${collection || "Default"}"
 }
+
 The event is based on this description: "${prompt}".
 Fill title, type, description, address and realistic coordinates.
 `;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.7
-      })
-    });
+    const models = ["gpt-4.1", "gpt-3.5-turbo"]; // fallback list
+    let data = null;
+    let lastError = null;
 
-    const data = await response.json();
+    for (const model of models) {
+      try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: userPrompt }
+            ],
+            temperature: 0.7
+          })
+        });
 
-    if (!data.choices || !data.choices.length) {
-      return res.status(500).json({ error: "No response from OpenAI" });
+        data = await response.json();
+        console.log(`[GPT] Model: ${model} | Status: ${response.status}`);
+        console.log("Raw OpenAI response:", JSON.stringify(data, null, 2));
+
+        if (!response.ok) {
+          lastError = data;
+          continue; // try next model
+        }
+
+        if (!data.choices || !data.choices.length) {
+          lastError = { error: "No choices returned" };
+          continue; // try next model
+        }
+
+        // Success, stop loop
+        break;
+
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!data || !data.choices || !data.choices.length) {
+      return res.status(500).json({ error: "OpenAI did not return any response", details: lastError });
     }
 
     const content = data.choices[0].message.content.trim();
@@ -65,6 +93,7 @@ Fill title, type, description, address and realistic coordinates.
     }
 
     res.json(parsed);
+
   } catch (err) {
     console.error("GPT proxy error:", err);
     next(err);
