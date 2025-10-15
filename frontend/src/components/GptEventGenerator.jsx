@@ -8,27 +8,17 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
   const [loadingGPT, setLoadingGPT] = useState(false);
 
   const generateFromGPT = async () => {
-    if (!gptPrompt) return;
+    if (!gptPrompt) {
+      setMessage("⚠️ Veuillez saisir une description.");
+      return;
+    }
+    if (!token) {
+      setMessage("⚠️ Vous devez être connecté pour générer des événements GPT.");
+      return;
+    }
+
     setLoadingGPT(true);
-
-    const system = "You are a helpful assistant that generates structured event data for travel apps. Output only valid JSON — no text or markdown.";
-
-    const prompt = `
-Generate a JSON object in this exact format:
-{
-  "title": "...",
-  "type": "...",
-  "date": "${new Date().toISOString()}",
-  "description": "...",
-  "address": "...",
-  "latitude": 0,
-  "longitude": 0,
-  "collection": "${activeCollection || "Default"}"
-}
-
-The event is based on this description: "${gptPrompt}".
-Fill title, type, description, address and realistic coordinates.
-`;
+    setMessage("");
 
     try {
       const response = await fetch(`${API_URL}/events/gpt-events`, {
@@ -39,13 +29,31 @@ Fill title, type, description, address and realistic coordinates.
         },
         body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection })
       });
-      
-      const parsed = await response.json();
-      setBulkJson(JSON.stringify([parsed], null, 2));
 
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("GPT backend error:", data);
+        setMessage(`❌ Erreur backend: ${data.error || "Unknown"}`);
+        setLoadingGPT(false);
+        return;
+      }
+
+      // Vérifie que la réponse contient bien un objet JSON valide
+      let parsed;
+      try {
+        parsed = typeof data === "string" ? JSON.parse(data) : data;
+      } catch (err) {
+        console.error("Erreur parsing GPT JSON:", data);
+        setMessage("❌ Le backend a renvoyé un JSON invalide");
+        setLoadingGPT(false);
+        return;
+      }
+
+      setBulkJson(JSON.stringify([parsed], null, 2));
       setMessage("✅ JSON généré depuis GPT !");
     } catch (err) {
-      console.error("Erreur GPT:", err);
+      console.error("Erreur GPT fetch:", err);
       setMessage("❌ Erreur lors de la génération GPT");
     } finally {
       setLoadingGPT(false);
