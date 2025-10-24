@@ -36,69 +36,47 @@ The event is based on this description: "${prompt}".
 Fill title, type, description, address and realistic coordinates.
 `;
 
-    const models = ["gpt-4.1", "gpt-3.5-turbo"]; // fallback list
-    let data = null;
-    let lastError = null;
+    // Local llama.cpp REST API endpoint
+    const LOCAL_API_URL = "http://localhost:5000/completions";
 
-    for (const model of models) {
-      try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: userPrompt }
-            ],
-            temperature: 0.7
-          })
-        });
+    const payload = {
+      prompt: userPrompt,
+      max_tokens: 300,     // adjust based on memory
+      temperature: 0.7
+    };
 
-        data = await response.json();
-        console.log(`[GPT] Model: ${model} | Status: ${response.status}`);
-        console.log("Raw OpenAI response:", JSON.stringify(data, null, 2));
+    const response = await fetch(LOCAL_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
 
-        if (!response.ok) {
-          lastError = data;
-          continue; // try next model
-        }
-
-        if (!data.choices || !data.choices.length) {
-          lastError = { error: "No choices returned" };
-          continue; // try next model
-        }
-
-        // Success, stop loop
-        break;
-
-      } catch (err) {
-        lastError = err;
-      }
+    if (!response.ok) {
+      const errorData = await response.text();
+      return res.status(500).json({ error: "Local API request failed", details: errorData });
     }
 
-    if (!data || !data.choices || !data.choices.length) {
-      return res.status(500).json({ error: "OpenAI did not return any response", details: lastError });
-    }
+    const data = await response.json();
+    // llama.cpp REST API returns: { "completion": "..." }
+    const content = data.completion?.trim();
+    if (!content) return res.status(500).json({ error: "No content returned from local model" });
 
-    const content = data.choices[0].message.content.trim();
+    // Parse JSON
     let parsed;
     try {
       parsed = JSON.parse(content);
     } catch (err) {
-      return res.status(500).json({ error: "Invalid JSON from GPT", raw: content });
+      return res.status(500).json({ error: "Invalid JSON from local model", raw: content });
     }
 
     res.json(parsed);
 
   } catch (err) {
-    console.error("GPT proxy error:", err);
+    console.error("Local GPT proxy error:", err);
     next(err);
   }
 });
+
 
 // =========================
 //        GET EVENTS
