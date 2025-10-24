@@ -25,14 +25,17 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: eventsdb
-      JWT_SECRET: supersecret
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "4000:4000"
     depends_on:
       - db
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_URL: /mapEvents_back
     container_name: events_frontend
     restart: always
     ports:
@@ -42,4 +45,5 @@ services:
 
 volumes:
   db_data:
+  
 

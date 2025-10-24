@@ -8,3 +8,13 @@ html, body, #root {
   margin: 0;
   padding: 0;
 }
+
+/* Mobile viewport height helper */
+.min-h-screen-mobile {
+  min-height: calc(var(--vh, 1vh) * 100);
+}
+
+/* Ensure Leaflet controls sit below navbar/menu on all viewports */
+.leaflet-top, .leaflet-bottom {
+  z-index: 400;
+}
