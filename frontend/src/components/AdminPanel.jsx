@@ -5,8 +5,10 @@ import { getTypeColor } from "../leaflet";
 import GptEventGenerator from "../components/GptEventGenerator";
 import apiFetch from "../apiFetch";
 
+
+
 export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollectionOnMap }) {
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const [events, setEvents] = useState([]);
   const [collections, setCollections] = useState([]);
   const [activeCollection, setActiveCollection] = useState("");
@@ -30,7 +32,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setActiveCollection(saved);
       setActiveCollectionOnMap(saved);
     } else {
-      apiFetch("/collections/active")
+      apiFetch("/collections/active", {}, logout)
         .then(res => res?.json())
         .then(data => {
           if (data?.collection) {
@@ -53,7 +55,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Fetch collections
   const fetchCollections = async () => {
     try {
-      const res = await apiFetch("/collections");
+      const res = await apiFetch("/collections", {}, logout);
       const data = await res?.json();
       setCollections(data || []);
       return data || [];
@@ -72,7 +74,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       return;
     }
     try {
-      const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`);
+      const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
       const data = await res?.json() || [];
       data.sort((a, b) => (a.position || 0) - (b.position || 0));
       setEvents(data);
@@ -90,7 +92,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       const res = await apiFetch("/collections", {
         method: "POST",
         body: JSON.stringify({ name })
-      });
+      }, logout);
       const newCollection = await res?.json();
       setCollections(prev => [...prev, newCollection.name]);
       setActiveCollection(newCollection.name);
@@ -104,7 +106,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Delete collection
   const deleteCollection = async (name) => {
     if (!confirm(`Supprimer la collection "${name}" ?`)) return;
-    await apiFetch(`/collections/${encodeURIComponent(name)}`, { method: "DELETE" });
+    await apiFetch(`/collections/${encodeURIComponent(name)}`, { method: "DELETE" }, logout);
     await fetchCollections();
     setActiveCollection("");
     setActiveCollectionOnMap("");
@@ -164,7 +166,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         latitude: finalLat, longitude: finalLon,
         position: editingEvent?.position || events.length + 1,
         collection: activeCollection
-      })
+      }, logout)
     });
 
     resetForm();
@@ -174,7 +176,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   // Delete event
   const handleDelete = async (id) => {
-    await apiFetch(`/events/${id}`, { method: "DELETE" });
+    await apiFetch(`/events/${id}`, { method: "DELETE" }, logout);
     fetchAllEvents();
     refreshEvents();
   };
@@ -182,7 +184,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Delete all events
   const deleteAllEvents = async () => {
     if (!confirm(`⚠️ Supprimer tous les événements de la collection "${activeCollection}" ?`)) return;
-    await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, { method: "DELETE" });
+    await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, { method: "DELETE" }, logout);
     fetchAllEvents();
     refreshEvents();
   };
@@ -193,7 +195,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       const eventsArray = JSON.parse(bulkJson);
       const res = await apiFetch("/events/bulk", {
         method: "POST",
-        body: JSON.stringify({ events: eventsArray, collection: activeCollection })
+        body: JSON.stringify({ events: eventsArray, collection: activeCollection }, logout)
       });
 
       if (!res?.ok) {
@@ -222,7 +224,8 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
     await apiFetch("/events/reorder", {
       method: "PATCH",
-      body: JSON.stringify({ orderedIds: items.map(e => e.id), collection: activeCollection })
+      body: JSON.stringify({ orderedIds: items.map(e => e.id), collection: activeCollection },
+      logout)
     });
 
     refreshEvents();

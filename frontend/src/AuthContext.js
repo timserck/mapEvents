@@ -15,13 +15,20 @@ export const AuthProvider = ({ children }) => {
     if (storedRole) setRole(storedRole);
   }, []);
 
+  const logout = () => {
+    setToken(null);
+    setRole(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+  };
+
   // Login via backend
   const login = async (username, password) => {
     try {
       const res = await apiFetch("/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
-      });
+      }, logout);
 
       if (!res?.ok) {
         const errData = await res?.json();
@@ -38,12 +45,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setToken(null);
-    setRole(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-  };
 
   return (
     <AuthContext.Provider value={{ token, role, login, logout }}>

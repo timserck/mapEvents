@@ -12,7 +12,7 @@ export default function App() {
 }
 
 function MainApp() {
-  const { token, role } = useAuth();
+  const { token, role, logout } = useAuth();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   const togglePanel = () => setIsPanelOpen((prev) => !prev);
@@ -24,6 +24,7 @@ function MainApp() {
       <Navbar togglePanel={togglePanel} />
       {/* MapPage receives only role, token, and panel state */}
       <MapPage
+        logout={logout}
         role={role}
         token={token}
         isPanelOpen={isPanelOpen}

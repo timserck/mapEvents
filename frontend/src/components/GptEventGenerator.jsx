@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import apiFetch from "../apiFetch";
+import { useAuth } from "../AuthContext";
+
 
 export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
   const [gptPrompt, setGptPrompt] = useState("");
   const [loadingGPT, setLoadingGPT] = useState(false);
-
+  const { logout } = useAuth();
   const generateFromGPT = async () => {
     if (!gptPrompt) {
       setMessage("⚠️ Veuillez saisir une description.");
@@ -21,7 +23,7 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
     try {
       const res = await apiFetch("/events/gpt-events", {
         method: "POST",
-        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection }),
+        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection }, logout),
       });
 
       if (!res?.ok) {

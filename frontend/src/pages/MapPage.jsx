@@ -3,14 +3,15 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-markercluster";
 import "../leafletFix.js";
 import { createNumberedIcon, myPositionIcon, hotelIcon } from "../leaflet.js";
-import AdminPanel from "../components/AdminPanel";
-import MultiSelectDropdown from "../components/MultiSelectDropdown";
+import AdminPanel from "../components/AdminPanel.jsx";
+import MultiSelectDropdown from "../components/MultiSelectDropdown.jsx";
 
 import { formatDate } from "../utils.js";
-import LazyImage from "../components/LazyImage";
+import LazyImage from "../components/LazyImage.jsx";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
-import apiFetch from "../apiFetch";
+import apiFetch from "../apiFetch.js";
+import { useAuth } from "../AuthContext";
 
 // Map center updater
 function MapCenterUpdater({ center }) {
@@ -80,7 +81,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
   return null;
 }
 
-export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
+export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel }) {
   const [activeCollection, setActiveCollection] = useState(() => localStorage.getItem("activeCollection") || "");
   const [publicCollection, setPublicCollection] = useState(null);
   const [events, setEvents] = useState([]);
@@ -93,6 +94,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
   const [collections, setCollections] = useState([]);
+
 
   const mapRef = useRef();
   const isAdmin = role === "admin";
@@ -107,7 +109,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   useEffect(() => {
     const fetchPublicCollection = async () => {
       try {
-        const res = await apiFetch("/collections/active");
+        const res = await apiFetch("/collections/active", {}, logout);
         const data = await res?.json();
         if (data?.collection) {
           setPublicCollection(data.collection);
@@ -128,7 +130,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
     const fetchEvents = async () => {
       try {
-        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`);
+        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
         const data = await res?.json() || [];
         data.sort((a, b) => (a.position || 0) - (b.position || 0));
         setEvents(data);
@@ -146,7 +148,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     if (!isAdmin) return;
     const fetchCollections = async () => {
       try {
-        const res = await apiFetch("/collections");
+        const res = await apiFetch("/collections", {}, logout);
         const data = await res?.json() || [];
         setCollections(data);
       } catch (err) {
