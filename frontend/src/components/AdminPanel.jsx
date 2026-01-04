@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
-import { API_URL } from "../config";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { getTypeColor } from "../leaflet";
 import GptEventGenerator from "../components/GptEventGenerator";
+import apiFetch from "../apiFetch";
 
 export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollectionOnMap }) {
   const { token } = useAuth();
@@ -23,18 +23,17 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const [bulkJson, setBulkJson] = useState("");
   const [message, setMessage] = useState("");
 
-  // 🆕 Load saved collection from localStorage and active collection for all users
+  // Load saved collection from localStorage or backend
   useEffect(() => {
     const saved = localStorage.getItem("activeCollection");
     if (saved) {
       setActiveCollection(saved);
       setActiveCollectionOnMap(saved);
     } else {
-      // Fetch currently active collection from backend
-      fetch(`${API_URL}/collections/active`)
-        .then(res => res.json())
+      apiFetch("/collections/active")
+        .then(res => res?.json())
         .then(data => {
-          if (data.collection) {
+          if (data?.collection) {
             setActiveCollection(data.collection);
             setActiveCollectionOnMap(data.collection);
           }
@@ -43,7 +42,6 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     }
   }, []);
 
-  // 🆕 Save collection to localStorage whenever it changes
   useEffect(() => {
     if (activeCollection) {
       localStorage.setItem("activeCollection", activeCollection);
@@ -55,12 +53,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Fetch collections
   const fetchCollections = async () => {
     try {
-      const res = await fetch(`${API_URL}/collections`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setCollections(data);
-      return data;
+      const res = await apiFetch("/collections");
+      const data = await res?.json();
+      setCollections(data || []);
+      return data || [];
     } catch (err) {
       console.error("Erreur fetch collections:", err);
       return [];
@@ -75,12 +71,14 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       setEvents([]);
       return;
     }
-    const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    data.sort((a, b) => (a.position || 0) - (b.position || 0));
-    setEvents(data);
+    try {
+      const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`);
+      const data = await res?.json() || [];
+      data.sort((a, b) => (a.position || 0) - (b.position || 0));
+      setEvents(data);
+    } catch (err) {
+      console.error("Erreur fetch events:", err);
+    }
   };
 
   useEffect(() => { fetchAllEvents(); }, [activeCollection, refreshEvents]);
@@ -88,19 +86,13 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Create collection
   const createCollection = async (name) => {
     if (!name) return;
-
     try {
-      const res = await fetch(`${API_URL}/collections`, {
+      const res = await apiFetch("/collections", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name })
       });
-
-      if (!res.ok) throw new Error("Cannot create collection");
-
-      const newCollection = await res.json();
+      const newCollection = await res?.json();
       setCollections(prev => [...prev, newCollection.name]);
-
       setActiveCollection(newCollection.name);
       setActiveCollectionOnMap(newCollection.name);
       setEvents([]);
@@ -112,10 +104,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Delete collection
   const deleteCollection = async (name) => {
     if (!confirm(`Supprimer la collection "${name}" ?`)) return;
-    await fetch(`${API_URL}/collections/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    await apiFetch(`/collections/${encodeURIComponent(name)}`, { method: "DELETE" });
     await fetchCollections();
     setActiveCollection("");
     setActiveCollectionOnMap("");
@@ -158,19 +147,18 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       try {
         const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
         const data = await res.json();
-        if (data.features && data.features.length > 0) {
+        if (data.features?.length) {
           finalLat = data.features[0].geometry.coordinates[1];
           finalLon = data.features[0].geometry.coordinates[0];
         }
       } catch (err) { console.error("Géocodage:", err); }
     }
 
-    const url = editingEvent ? `${API_URL}/events/${editingEvent.id}` : `${API_URL}/events`;
+    const url = editingEvent ? `/events/${editingEvent.id}` : "/events";
     const method = editingEvent ? "PUT" : "POST";
 
-    await fetch(url, {
+    await apiFetch(url, {
       method,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         title, type, date, description, address,
         latitude: finalLat, longitude: finalLon,
@@ -186,17 +174,15 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
 
   // Delete event
   const handleDelete = async (id) => {
-    await fetch(`${API_URL}/events/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await apiFetch(`/events/${id}`, { method: "DELETE" });
     fetchAllEvents();
     refreshEvents();
   };
 
-  // Delete all events in collection
+  // Delete all events
   const deleteAllEvents = async () => {
     if (!confirm(`⚠️ Supprimer tous les événements de la collection "${activeCollection}" ?`)) return;
-    await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`, {
-      method: "DELETE", headers: { Authorization: `Bearer ${token}` }
-    });
+    await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, { method: "DELETE" });
     fetchAllEvents();
     refreshEvents();
   };
@@ -205,15 +191,14 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const handleBulkImport = async () => {
     try {
       const eventsArray = JSON.parse(bulkJson);
-      const res = await fetch(`${API_URL}/events/bulk`, {
+      const res = await apiFetch("/events/bulk", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ events: eventsArray, collection: activeCollection })
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        setMessage(`❌ Erreur: ${err.error}`);
+      if (!res?.ok) {
+        const err = await res?.json();
+        setMessage(`❌ Erreur: ${err?.error}`);
         return;
       }
 
@@ -235,17 +220,22 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     items.splice(result.destination.index, 0, moved);
     setEvents(items);
 
-    await fetch(`${API_URL}/events/reorder`, {
+    await apiFetch("/events/reorder", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ orderedIds: items.map((e) => e.id), collection: activeCollection })
+      body: JSON.stringify({ orderedIds: items.map(e => e.id), collection: activeCollection })
     });
 
     refreshEvents();
   };
 
+  // --- JSX remains mostly the same ---
+  // You just remove repeated `Authorization` headers and replace `fetch` with `apiFetch`
+  // I can also refactor the JSX fully if needed
   return (
     <div className="w-full h-full bg-gray-50 p-4 shadow flex flex-col overflow-y-auto">
+      {/* ...rest of JSX stays unchanged... */}
+
+
       <h2 className="text-xl font-bold mb-4">📌 Gestion des événements</h2>
 
       {/* Collections */}

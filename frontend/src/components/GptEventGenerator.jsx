@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import { API_URL } from "../config";
-import { useAuth } from "../AuthContext";
+import apiFetch from "../apiFetch";
 
 export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
-  const { token } = useAuth();
   const [gptPrompt, setGptPrompt] = useState("");
   const [loadingGPT, setLoadingGPT] = useState(false);
 
@@ -12,8 +10,8 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
       setMessage("⚠️ Veuillez saisir une description.");
       return;
     }
-    if (!token) {
-      setMessage("⚠️ Vous devez être connecté pour générer des événements GPT.");
+    if (!activeCollection) {
+      setMessage("⚠️ Sélectionnez ou créez une collection d'abord.");
       return;
     }
 
@@ -21,25 +19,22 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
     setMessage("");
 
     try {
-      const response = await fetch(`${API_URL}/events/gpt-events`, {
+      const res = await apiFetch("/events/gpt-events", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection })
+        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error("GPT backend error:", data);
-        setMessage(`❌ Erreur backend: ${data.error || "Unknown"}`);
+      if (!res?.ok) {
+        const errData = await res?.json();
+        console.error("GPT backend error:", errData);
+        setMessage(`❌ Erreur backend: ${errData?.error || "Unknown"}`);
         setLoadingGPT(false);
         return;
       }
 
-      // Vérifie que la réponse contient bien un objet JSON valide
+      const data = await res.json();
+
+      // Ensure it's valid JSON
       let parsed;
       try {
         parsed = typeof data === "string" ? JSON.parse(data) : data;

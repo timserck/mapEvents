@@ -6,11 +6,11 @@ import { createNumberedIcon, myPositionIcon, hotelIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel";
 import MultiSelectDropdown from "../components/MultiSelectDropdown";
 
-import { API_URL } from "../config";
-import LazyImage from "../components/LazyImage";
 import { formatDate } from "../utils.js";
+import LazyImage from "../components/LazyImage";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
+import apiFetch from "../apiFetch";
 
 // Map center updater
 function MapCenterUpdater({ center }) {
@@ -103,15 +103,15 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     else localStorage.removeItem("activeCollection");
   }, [activeCollection]);
 
-  // Fetch public collection from backend
+  // Fetch public collection
   useEffect(() => {
     const fetchPublicCollection = async () => {
       try {
-        const res = await fetch(`${API_URL}/collections/active`);
-        const data = await res.json();
-        if (data?.activeCollection) {
-          setPublicCollection(data.activeCollection);
-          if (!isAdmin && !activeCollection) setActiveCollection(data.activeCollection);
+        const res = await apiFetch("/collections/active");
+        const data = await res?.json();
+        if (data?.collection) {
+          setPublicCollection(data.collection);
+          if (!isAdmin && !activeCollection) setActiveCollection(data.collection);
         }
       } catch (err) {
         console.error("Erreur fetch public collection:", err);
@@ -128,8 +128,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     }
     const fetchEvents = async () => {
       try {
-        const res = await fetch(`${API_URL}/events?collection=${encodeURIComponent(activeCollection)}`);
-        const data = await res.json();
+        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`);
+        const data = await res?.json() || [];
         data.sort((a, b) => (a.position || 0) - (b.position || 0));
         setEvents(data);
         if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
@@ -141,13 +141,13 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     fetchEvents();
   }, [activeCollection]);
 
-  // Fetch collections for filter (admin)
+  // Fetch collections (admin only)
   useEffect(() => {
     if (!isAdmin) return;
     const fetchCollections = async () => {
       try {
-        const res = await fetch(`${API_URL}/collections`);
-        const data = await res.json();
+        const res = await apiFetch("/collections");
+        const data = await res?.json() || [];
         setCollections(data);
       } catch (err) {
         console.error("Fetch collections error:", err);
@@ -184,7 +184,6 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
     return () => map.off("movestart", onMove);
   }, [mapRef.current]);
 
-  // Go to event
   const goToEvent = (ev) => {
     if (!mapRef.current) return;
     mapRef.current.setView([ev.latitude, ev.longitude], 15, { animate: true });
@@ -204,7 +203,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
   return (
     <div className="flex h-screen">
       <div className="flex-1 flex flex-col">
-        {/* Filters (mobile) */}
+        {/* Filters */}
         <div className="p-2 bg-gray-100 md:hidden flex flex-col gap-2">
           <input
             type="text"
@@ -216,23 +215,12 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <details>
             <summary className="cursor-pointer select-none">Filtres</summary>
             <div className="mt-2 flex flex-col gap-2">
-              <MultiSelectDropdown
-                options={uniqueTypes}
-                selected={filterType}
-                setSelected={setFilterType}
-                label="Type"
-              />
-              <MultiSelectDropdown
-                options={uniqueDates}
-                selected={filterDate}
-                setSelected={setFilterDate}
-                label="Date"
-              />
+              <MultiSelectDropdown options={uniqueTypes} selected={filterType} setSelected={setFilterType} label="Type" />
+              <MultiSelectDropdown options={uniqueDates} selected={filterDate} setSelected={setFilterDate} label="Date" />
             </div>
           </details>
         </div>
 
-        {/* Filters (desktop) */}
         <div className="hidden md:flex p-2 gap-2 bg-gray-100 items-center">
           <input
             type="text"
@@ -241,18 +229,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
             onChange={(e) => setSearchName(e.target.value)}
             className="border rounded p-2 flex-1"
           />
-          <MultiSelectDropdown
-            options={uniqueTypes}
-            selected={filterType}
-            setSelected={setFilterType}
-            label="Type"
-          />
-          <MultiSelectDropdown
-            options={uniqueDates}
-            selected={filterDate}
-            setSelected={setFilterDate}
-            label="Date"
-          />
+          <MultiSelectDropdown options={uniqueTypes} selected={filterType} setSelected={setFilterType} label="Type" />
+          <MultiSelectDropdown options={uniqueDates} selected={filterDate} setSelected={setFilterDate} label="Date" />
         </div>
 
         {/* Map */}
@@ -274,12 +252,8 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
                 icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(e.position || index + 1, e.type)}
               >
                 <Popup minWidth={250}>
-                  <strong>
-                    {(e.position || index + 1)}. {e.title}
-                  </strong>
-                  <p>
-                    {e.type} - {formatDate(e.date)}
-                  </p>
+                  <strong>{(e.position || index + 1)}. {e.title}</strong>
+                  <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
                   <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage
@@ -302,10 +276,7 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
 
           {userPosition && (
             <Marker position={userPosition} icon={myPositionIcon}>
-              <Popup>
-                📍 Vous êtes ici
-                {userAddress && <div>{userAddress}</div>}
-              </Popup>
+              <Popup>📍 Vous êtes ici {userAddress && <div>{userAddress}</div>}</Popup>
             </Marker>
           )}
         </MapContainer>
@@ -318,13 +289,11 @@ export default function MapPage({ role, isPanelOpen, onCloseAdminPanel }) {
           <div className="absolute inset-y-0 right-0 w-full bg-white md:bg-transparent md:relative md:h-full flex flex-col">
             <div className="md:hidden flex items-center justify-between p-3 border-b bg-white">
               <h3 className="font-semibold">Panel Admin</h3>
-              <button onClick={onCloseAdminPanel} className="text-gray-600">
-                Fermer
-              </button>
+              <button onClick={onCloseAdminPanel} className="text-gray-600">Fermer</button>
             </div>
             <div className="flex-1 overflow-y-auto">
               <AdminPanel
-                refreshEvents={() => {}}
+                refreshEvents={fetchEvents} // Optional: pass real refresh
                 goToEvent={goToEvent}
                 activeCollection={activeCollection}
                 setActiveCollectionOnMap={setActiveCollection}

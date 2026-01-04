@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { API_URL } from "./config";
+import apiFetch from "./apiFetch";
 
 const AuthContext = createContext();
 
@@ -7,6 +7,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [role, setRole] = useState(null);
 
+  // Load token & role from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     const storedRole = localStorage.getItem("role");
@@ -17,15 +18,14 @@ export const AuthProvider = ({ children }) => {
   // Login via backend
   const login = async (username, password) => {
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
+      const res = await apiFetch("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Login failed");
+      if (!res?.ok) {
+        const errData = await res?.json();
+        throw new Error(errData?.error || "Login failed");
       }
 
       const data = await res.json(); // { token, role }
