@@ -3,7 +3,7 @@ import { useAuth } from "../AuthContext";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { getTypeColor } from "../leaflet";
 import GptEventGenerator from "../components/GptEventGenerator";
-import { apiFetch } from "./apiFetch";
+import { apiFetch } from "../apiFetch";
 
 
 
