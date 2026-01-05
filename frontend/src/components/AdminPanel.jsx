@@ -5,7 +5,7 @@ import { getTypeColor } from "../leaflet";
 // import GptEventGenerator from "../components/GptEventGenerator";
 import { apiFetch } from "../apiFetch";
 import { toast } from "react-toastify";
-import { API_URL } from "./config";
+import { API_URL } from "../config";
 
 
 
