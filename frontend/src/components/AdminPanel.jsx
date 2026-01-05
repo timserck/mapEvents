@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { getTypeColor } from "../leaflet";
-import GptEventGenerator from "../components/GptEventGenerator";
+// import GptEventGenerator from "../components/GptEventGenerator";
 import { apiFetch } from "../apiFetch";
+import { toast } from "react-toastify";
 
 
 
@@ -140,7 +141,10 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   // Submit create/edit
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!activeCollection) { alert("Sélectionnez ou créez une collection d'abord."); return; }
+    if (!activeCollection) {
+      toast.error("Sélectionnez ou créez une collection d'abord.");
+      return;
+    }
 
     let finalLat = latitude;
     let finalLon = longitude;
@@ -225,7 +229,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     await apiFetch("/events/reorder", {
       method: "PATCH",
       body: JSON.stringify({ orderedIds: items.map(e => e.id), collection: activeCollection },
-      logout)
+        logout)
     });
 
     refreshEvents();
@@ -300,11 +304,11 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         <h3 className="font-semibold mb-2">📥 Importer ou générer des événements</h3>
 
         {/* 🧠 GPT Component */}
-        <GptEventGenerator
+        {/* <GptEventGenerator
           activeCollection={activeCollection}
           setBulkJson={setBulkJson}
           setMessage={setMessage}
-        />
+        /> */}
 
         <textarea value={bulkJson} onChange={e => setBulkJson(e.target.value)}
           placeholder='[{"title":"Concert de Jazz","type":"Concert","date":"2025-10-16","description":"...","address":"Paris, France"}]'
@@ -374,7 +378,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
                 },
                 body: JSON.stringify({ name: activeCollection }),
               });
-              alert(`✅ La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
+              toast.error(`✅ La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
             } catch (err) {
               console.error("Erreur pour définir la collection publique :", err);
             }

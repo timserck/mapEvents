@@ -11,7 +11,7 @@ import LazyImage from "../components/LazyImage.jsx";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
 import {apiFetch} from "../apiFetch.js";
-import { useAuth } from "../AuthContext";
+import { toast } from "react-toastify";
 
 // Map center updater
 function MapCenterUpdater({ center }) {
@@ -28,7 +28,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
 
   const locateUser = () => {
     if (!navigator.geolocation) {
-      alert("Votre navigateur ne supporte pas la géolocalisation");
+      toast.error("Votre navigateur ne supporte pas la géolocalisation");
       return;
     }
 
@@ -47,7 +47,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
         } catch {}
       },
       (err) => {
-        alert("Impossible de récupérer votre position : " + err.message);
+        toast.error("Impossible de récupérer votre position : " + err.message);
       },
       { enableHighAccuracy: true }
     );

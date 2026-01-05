@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import { AuthProvider, useAuth } from "./AuthContext";
 import MapPage from "./pages/MapPage";
 import Navbar from "./components/Navbar";
@@ -7,6 +9,7 @@ export default function App() {
   return (
     <AuthProvider>
       <MainApp />
+      <ToastContainer position="top-right" autoClose={3000} />
     </AuthProvider>
   );
 }
