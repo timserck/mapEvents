@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import apiFetch from "../apiFetch";
+import { apiFetch } from "../apiFetch";
 import { useAuth } from "../AuthContext";
 
 

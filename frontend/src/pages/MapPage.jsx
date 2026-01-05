@@ -10,7 +10,7 @@ import { formatDate } from "../utils.js";
 import LazyImage from "../components/LazyImage.jsx";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
-import apiFetch from "../apiFetch.js";
+import {apiFetch} from "../apiFetch.js";
 import { useAuth } from "../AuthContext";
 
 // Map center updater
