@@ -56,7 +56,6 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     } else {
       localStorage.removeItem("activeCollection");
     }
-      window.location.href = "/mapEvents/";
   }, [activeCollection]);
 
   // Fetch collections
