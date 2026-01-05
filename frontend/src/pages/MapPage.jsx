@@ -274,6 +274,17 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
                   >
                     🚶 Itinéraire
                   </a>
+
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-500 underline block mt-2"
+                  >
+                    🚶 place
+                  </a>
+
+
                 </Popup>
               </Marker>
             ))}
