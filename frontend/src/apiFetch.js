@@ -1,4 +1,4 @@
-import { API_URL } from "../config";
+import { API_URL } from "./config";
 
 /**
  * apiFetch - wrapper around fetch with token and 401 handling
