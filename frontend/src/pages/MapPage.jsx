@@ -94,10 +94,41 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
   const [userHasMovedMap, setUserHasMovedMap] = useState(false);
   const [center, setCenter] = useState([48.8566, 2.3522]);
   const [collections, setCollections] = useState([]);
-
-
   const mapRef = useRef();
   const isAdmin = role === "admin";
+
+
+      // Fetch event images
+      const fetchImagesForEvents = async (eventsList) => {
+        const updatedImages = {};
+        for (let ev of eventsList) {
+          const cacheKey = `event_image_${ev.id}`;
+          let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
+          if (imageUrl === DEFAULT_IMAGE) {
+            try {
+              const query = encodeURIComponent(ev.title);
+              const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
+              if (res.ok && res.url) imageUrl = res.url;
+            } catch {}
+          }
+          setCache(cacheKey, imageUrl, CACHE_TTL);
+          updatedImages[ev.id] = imageUrl;
+        }
+        setEventImages((prev) => ({ ...prev, ...updatedImages }));
+      };
+  
+    const fetchEvents = async () => {
+      try {
+        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
+        const data = await res?.json() || [];
+        data.sort((a, b) => (a.position || 0) - (b.position || 0));
+        setEvents(data);
+        if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
+        fetchImagesForEvents(data);
+      } catch (err) {
+        console.error("Fetch events error:", err);
+      }
+    };
 
   // Save active collection
   useEffect(() => {
@@ -128,18 +159,7 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
       setEvents([]);
       return;
     }
-    const fetchEvents = async () => {
-      try {
-        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
-        const data = await res?.json() || [];
-        data.sort((a, b) => (a.position || 0) - (b.position || 0));
-        setEvents(data);
-        if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
-        fetchImagesForEvents(data);
-      } catch (err) {
-        console.error("Fetch events error:", err);
-      }
-    };
+
     fetchEvents();
   }, [activeCollection]);
 
@@ -158,24 +178,7 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
     fetchCollections();
   }, [isAdmin]);
 
-  // Fetch event images
-  const fetchImagesForEvents = async (eventsList) => {
-    const updatedImages = {};
-    for (let ev of eventsList) {
-      const cacheKey = `event_image_${ev.id}`;
-      let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
-      if (imageUrl === DEFAULT_IMAGE) {
-        try {
-          const query = encodeURIComponent(ev.title);
-          const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
-          if (res.ok && res.url) imageUrl = res.url;
-        } catch {}
-      }
-      setCache(cacheKey, imageUrl, CACHE_TTL);
-      updatedImages[ev.id] = imageUrl;
-    }
-    setEventImages((prev) => ({ ...prev, ...updatedImages }));
-  };
+
 
   // Track map movement
   useEffect(() => {
