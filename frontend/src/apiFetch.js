@@ -28,7 +28,7 @@ export async function apiFetch(path, options = {}, onUnauthorized) {
       onUnauthorized();
     } else {
       // Fallback: redirect
-      window.location.href = "/";
+      window.location.href = "/mapEvents/";
     }
 
     return null;
