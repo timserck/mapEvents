@@ -379,7 +379,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
                 },
                 body: JSON.stringify({ name: activeCollection }),
               });
-              toast.success(`✅ La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
+              toast.success(`La collection "${activeCollection}" est maintenant active pour tous les utilisateurs`);
             } catch (err) {
               console.error("Erreur pour définir la collection publique :", err);
             }
