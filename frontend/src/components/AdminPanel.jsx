@@ -168,15 +168,24 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
     const url = editingEvent ? `/events/${editingEvent.id}` : "/events";
     const method = editingEvent ? "PUT" : "POST";
 
-    await apiFetch(url, {
-      method,
-      body: JSON.stringify({
-        title, type, date, description, address,
-        latitude: finalLat, longitude: finalLon,
-        position: editingEvent?.position || events.length + 1,
-        collection: activeCollection
-      }, logout)
-    });
+    await apiFetch(
+      url,
+      {
+        method,
+        body: JSON.stringify({
+          title,
+          type,
+          date,
+          description,
+          address,
+          latitude: finalLat,
+          longitude: finalLon,
+          position: editingEvent?.position || events.length + 1,
+          collection: activeCollection,
+        }),
+      },
+      logout
+    );
 
     resetForm();
     fetchAllEvents();
