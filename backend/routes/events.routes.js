@@ -133,26 +133,25 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
       position = posRes.rows[0].next;
     }
 
-    // 🔒 DUPLICATE CHECK
+    // 🔒 DUPLICATE CHECK (lat/lng only)
     const existsRes = await pool.query(
       `
       SELECT 1
       FROM events
-      WHERE position = $1
-        AND collection_id = (SELECT id FROM collections WHERE name = $2)
+      WHERE collection_id = (SELECT id FROM collections WHERE name = $1)
         AND ST_DWithin(
           location,
-          ST_SetSRID(ST_MakePoint($3, $4), 4326),
+          ST_SetSRID(ST_MakePoint($2, $3), 4326),
           0
         )
       LIMIT 1
       `,
-      [position, collection, longitude, latitude]
+      [collection, longitude, latitude]
     );
 
     if (existsRes.rowCount > 0) {
       return res.status(409).json({
-        error: "Event already exists at this position and location",
+        error: "An event already exists at this location",
       });
     }
 
@@ -187,6 +186,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
 });
 
 
+
 // =========================
 //        UPDATE EVENT
 // =========================
@@ -211,27 +211,26 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    // 🔒 DUPLICATE CHECK (exclude current event)
+    // 🔒 DUPLICATE CHECK (lat/lng only, exclude current event)
     const existsRes = await pool.query(
       `
       SELECT 1
       FROM events
       WHERE id <> $1
-        AND position = $2
-        AND collection_id = (SELECT id FROM collections WHERE name = $3)
+        AND collection_id = (SELECT id FROM collections WHERE name = $2)
         AND ST_DWithin(
           location,
-          ST_SetSRID(ST_MakePoint($4, $5), 4326),
+          ST_SetSRID(ST_MakePoint($3, $4), 4326),
           0
         )
       LIMIT 1
       `,
-      [id, position, collection, longitude, latitude]
+      [id, collection, longitude, latitude]
     );
 
     if (existsRes.rowCount > 0) {
       return res.status(409).json({
-        error: "Another event already exists at this position and location",
+        error: "Another event already exists at this location",
       });
     }
 
@@ -275,6 +274,7 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
     next(err);
   }
 });
+
 
 // =========================
 //        DELETE EVENT
