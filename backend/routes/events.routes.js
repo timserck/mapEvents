@@ -105,32 +105,87 @@ router.get("/", async (req, res, next) => {
 // =========================
 router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
-    let { title, type, date, latitude, longitude, description, address, position, collection } = req.body;
+    let {
+      title,
+      type,
+      date,
+      latitude,
+      longitude,
+      description,
+      address,
+      position,
+      collection,
+    } = req.body;
+
     collection ||= "Default";
+
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
+    // Auto-position if missing
     if (!position) {
       const posRes = await pool.query(
-        "SELECT COALESCE(MAX(position),0)+1 AS next FROM events WHERE collection_id=(SELECT id FROM collections WHERE name=$1)",
+        `SELECT COALESCE(MAX(position),0)+1 AS next
+         FROM events
+         WHERE collection_id = (SELECT id FROM collections WHERE name = $1)`,
         [collection]
       );
       position = posRes.rows[0].next;
     }
 
-    const result = await pool.query(
-      `INSERT INTO events (title,type,date,description,address,location,position,collection_id)
-       VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,(SELECT id FROM collections WHERE name=$8))
-       RETURNING id,title,type,date,description,address,position,
-                 ST_Y(location::geometry) AS latitude,
-                 ST_X(location::geometry) AS longitude`,
-      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, position, collection]
+    // 🔒 DUPLICATE CHECK
+    const existsRes = await pool.query(
+      `
+      SELECT 1
+      FROM events
+      WHERE position = $1
+        AND collection_id = (SELECT id FROM collections WHERE name = $2)
+        AND ST_DWithin(
+          location,
+          ST_SetSRID(ST_MakePoint($3, $4), 4326),
+          0
+        )
+      LIMIT 1
+      `,
+      [position, collection, longitude, latitude]
     );
+
+    if (existsRes.rowCount > 0) {
+      return res.status(409).json({
+        error: "Event already exists at this position and location",
+      });
+    }
+
+    // ✅ INSERT
+    const result = await pool.query(
+      `
+      INSERT INTO events
+        (title, type, date, description, address, location, position, collection_id)
+      VALUES
+        ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,(SELECT id FROM collections WHERE name=$8))
+      RETURNING
+        id,title,type,date,description,address,position,
+        ST_Y(location::geometry) AS latitude,
+        ST_X(location::geometry) AS longitude
+      `,
+      [
+        title,
+        type,
+        date,
+        description,
+        address,
+        `SRID=4326;POINT(${longitude} ${latitude})`,
+        position,
+        collection,
+      ]
+    );
+
     res.json({ ...result.rows[0], collection });
   } catch (err) {
     next(err);
   }
 });
+
 
 // =========================
 //        UPDATE EVENT
@@ -138,23 +193,83 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
 router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const { id } = req.params;
-    let { title, type, date, description, address, latitude, longitude, collection } = req.body;
+
+    let {
+      title,
+      type,
+      date,
+      description,
+      address,
+      latitude,
+      longitude,
+      collection,
+      position,
+    } = req.body;
+
     collection ||= "Default";
+
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    const result = await pool.query(
-      `UPDATE events
-       SET title=$1,type=$2,date=$3,description=$4,address=$5,
-           location=ST_GeogFromText($6),
-           collection_id=(SELECT id FROM collections WHERE name=$7)
-       WHERE id=$8
-       RETURNING id,title,type,date,description,address,position,
-                 ST_Y(location::geometry) AS latitude,
-                 ST_X(location::geometry) AS longitude`,
-      [title, type, date, description, address, `SRID=4326;POINT(${longitude} ${latitude})`, collection, id]
+    // 🔒 DUPLICATE CHECK (exclude current event)
+    const existsRes = await pool.query(
+      `
+      SELECT 1
+      FROM events
+      WHERE id <> $1
+        AND position = $2
+        AND collection_id = (SELECT id FROM collections WHERE name = $3)
+        AND ST_DWithin(
+          location,
+          ST_SetSRID(ST_MakePoint($4, $5), 4326),
+          0
+        )
+      LIMIT 1
+      `,
+      [id, position, collection, longitude, latitude]
     );
-    if (!result.rows.length) return res.status(404).json({ error: "Event not found" });
+
+    if (existsRes.rowCount > 0) {
+      return res.status(409).json({
+        error: "Another event already exists at this position and location",
+      });
+    }
+
+    // ✅ UPDATE
+    const result = await pool.query(
+      `
+      UPDATE events
+      SET title=$1,
+          type=$2,
+          date=$3,
+          description=$4,
+          address=$5,
+          location=ST_GeogFromText($6),
+          collection_id=(SELECT id FROM collections WHERE name=$7),
+          position=$8
+      WHERE id=$9
+      RETURNING
+        id,title,type,date,description,address,position,
+        ST_Y(location::geometry) AS latitude,
+        ST_X(location::geometry) AS longitude
+      `,
+      [
+        title,
+        type,
+        date,
+        description,
+        address,
+        `SRID=4326;POINT(${longitude} ${latitude})`,
+        collection,
+        position,
+        id,
+      ]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
     res.json({ ...result.rows[0], collection });
   } catch (err) {
     next(err);
