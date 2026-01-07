@@ -260,7 +260,7 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
                   <strong>{(e.position || index + 1)}. {e.title}</strong>
                   <p>{e.type} - {formatDate(e.date)}</p>
                   <p>{e.address}</p>
-                  <div className="mt-2" dangerouslySetInnerHTML={{ __html: e.description }} />
+                  <p dangerouslySetInnerHTML={{ __html: e.description }} />
                   <LazyImage
                     src={eventImages[e.id] || DEFAULT_IMAGE}
                     alt={e.title}
