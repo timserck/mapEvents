@@ -9,30 +9,24 @@ import { API_URL } from "./config";
 export async function apiFetch(path, options = {}, onUnauthorized) {
   const token = localStorage.getItem("token");
 
+  console.log(options, 'options')
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
+      ...(options.headers || {}),
     },
   });
 
   if (res.status === 401) {
-    // Clear token and role
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-
-    // Call optional logout callback from React context
-    if (typeof onUnauthorized === "function") {
-      onUnauthorized();
-    } else {
-      // Fallback: redirect
-      window.location.href = "/mapEvents/";
-    }
-
+    localStorage.clear();
+    if (onUnauthorized) onUnauthorized();
+    else window.location.href = "/mapEvents/";
     return null;
   }
 
   return res;
 }
+
