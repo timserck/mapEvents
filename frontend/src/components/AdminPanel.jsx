@@ -213,10 +213,15 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
   const handleBulkImport = async () => {
     try {
       const eventsArray = JSON.parse(bulkJson);
-      const res = await apiFetch("/events/bulk", {
-        method: "POST",
-        body: JSON.stringify({ events: eventsArray, collection: activeCollection }, logout)
-      });
+      const res = await apiFetch(
+        "/events/bulk",
+        {
+          method: "POST",
+          body: JSON.stringify({ events: eventsArray, collection: activeCollection })
+        },
+        logout
+      );
+
 
       if (!res?.ok) {
         const err = await res?.json();
