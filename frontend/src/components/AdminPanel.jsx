@@ -285,44 +285,47 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </button>
 
         <Modal
-        className="z-999"
-  isOpen={isCreateCollectionOpen}
-  onClose={() => setIsCreateCollectionOpen(false)}
-  title="Nouvelle collection"
->
-  <input
-    type="text"
-    value={newCollectionName}
-    onChange={(e) => setNewCollectionName(e.target.value)}
-    placeholder="Nom de la collection"
-    className="w-full border rounded px-3 py-2 mb-4 focus:outline-none focus:ring focus:ring-blue-300"
-    autoFocus
-  />
+          className="z-[999]"
+          isOpen={isCreateCollectionOpen}
+          onClose={() => setIsCreateCollectionOpen(false)}
+          title="Nouvelle collection"
+          style={{
+            zIndex: "9999"
+          }}
+        >
+          <input
+            type="text"
+            value={newCollectionName}
+            onChange={(e) => setNewCollectionName(e.target.value)}
+            placeholder="Nom de la collection"
+            className="w-full border rounded px-3 py-2 mb-4 focus:outline-none focus:ring focus:ring-blue-300"
+            autoFocus
+          />
 
-  <div className="flex justify-end gap-2">
-    <button
-      onClick={() => {
-        setIsCreateCollectionOpen(false);
-        setNewCollectionName("");
-      }}
-      className="px-4 py-2 rounded border hover:bg-gray-100"
-    >
-      Annuler
-    </button>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setIsCreateCollectionOpen(false);
+                setNewCollectionName("");
+              }}
+              className="px-4 py-2 rounded border hover:bg-gray-100"
+            >
+              Annuler
+            </button>
 
-    <button
-      onClick={() => {
-        if (!newCollectionName.trim()) return;
-        createCollection(newCollectionName.trim());
-        setNewCollectionName("");
-        setIsCreateCollectionOpen(false);
-      }}
-      className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
-    >
-      Créer
-    </button>
-  </div>
-</Modal>
+            <button
+              onClick={() => {
+                if (!newCollectionName.trim()) return;
+                createCollection(newCollectionName.trim());
+                setNewCollectionName("");
+                setIsCreateCollectionOpen(false);
+              }}
+              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Créer
+            </button>
+          </div>
+        </Modal>
 
 
         {activeCollection && (
