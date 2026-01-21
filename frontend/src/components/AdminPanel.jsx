@@ -100,6 +100,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         body: JSON.stringify({ name })
       }, logout);
       const newCollection = await res?.json();
+      console.log(newCollection, 'newCollection', res, 'res')
       setCollections(prev => [...prev, newCollection.name]);
       setActiveCollection(newCollection.name);
       setActiveCollectionOnMap(newCollection.name);
