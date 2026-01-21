@@ -284,6 +284,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
         </button>
 
         <Modal
+        className="z-999"
   isOpen={isCreateCollectionOpen}
   onClose={() => setIsCreateCollectionOpen(false)}
   title="Nouvelle collection"
