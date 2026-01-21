@@ -64,6 +64,7 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
       const res = await apiFetch("/collections", {}, logout);
       const data = await res?.json();
       setCollections(data || []);
+      console.log(data, 'data')
       return data || [];
     } catch (err) {
       console.error("Erreur fetch collections:", err);
