@@ -9,7 +9,7 @@ import { API_URL } from "./config";
 export async function apiFetch(path, options = {}, onUnauthorized) {
   const token = localStorage.getItem("token");
 
-  console.log(options, 'options')
+  //console.log(options, 'options')
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
