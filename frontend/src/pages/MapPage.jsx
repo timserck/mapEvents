@@ -105,10 +105,9 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
   const routeLayerRef = useRef(null);
 
 
-
   const toggleRoute = async () => {
     if (!mapRef.current) return;
-
+  
     // 👉 cacher la route
     if (showRoute) {
       if (routeLayerRef.current) {
@@ -118,36 +117,63 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
       setShowRoute(false);
       return;
     }
-
+  
     try {
-      const res = await apiFetch(
-        `/events/route?collection=${encodeURIComponent(activeCollection)}&mode=${routeMode}`,
-        {},
-        logout
+      // ⭐ 1️⃣ récupérer uniquement les favoris
+      const favoriteEvents = events
+        .filter(e => e.favorite)
+        .sort((a, b) => a.position - b.position);
+  
+      if (favoriteEvents.length < 2) {
+        toast.warning("Sélectionne au moins 2 événements favoris");
+        return;
+      }
+  
+      // 2️⃣ format OSRM : lng,lat
+      const coords = favoriteEvents
+        .map(e => `${e.longitude},${e.latitude}`)
+        .join(";");
+  
+      // 3️⃣ OSRM
+      const osrmUrl = `https://router.project-osrm.org/route/v1/${routeMode}/${coords}?overview=full&geometries=geojson`;
+  
+      const response = await fetch(osrmUrl);
+      const data = await response.json();
+  
+      if (!data.routes?.length) {
+        toast.error("Aucun itinéraire trouvé");
+        return;
+      }
+  
+      const latlngs = data.routes[0].geometry.coordinates.map(
+        ([lng, lat]) => [lat, lng]
       );
-
-      const data = await res.json();
-
-      const latlngs = data.geometry.coordinates.map(c => [c[1], c[0]]);
-
+  
+      // 4️⃣ tracer
       routeLayerRef.current = L.polyline(latlngs, {
         color: routeMode === "foot" ? "green" : "blue",
         weight: 5,
         opacity: 0.8
       }).addTo(mapRef.current);
-
+  
       mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
         padding: [40, 40]
       });
-
-      setRouteData(data);
+  
+      setRouteData({
+        mode: routeMode,
+        distance: data.routes[0].distance,
+        duration: data.routes[0].duration
+      });
+  
       setShowRoute(true);
-
+  
     } catch (err) {
       toast.error("Impossible de charger l’itinéraire");
       console.error(err);
     }
   };
+  
 
 
 

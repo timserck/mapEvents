@@ -16,7 +16,7 @@ export default function RouteToggleButton({ toggleRoute, showRoute, routeMode, s
     container.style.gap = "4px";
 
     const btn = L.DomUtil.create("button", "", container);
-    btn.innerHTML = showRoute ? "❌ Cacher la route" : "🗺️ Afficher la route";
+    btn.innerHTML = showRoute ? "❌ Cacher Itinéraire favoris" : "🗺️ Afficher Itinéraire favoris";
     btn.style.cursor = "pointer";
 
     const select = L.DomUtil.create("select", "", container);
