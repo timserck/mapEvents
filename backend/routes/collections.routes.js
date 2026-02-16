@@ -9,12 +9,15 @@ router.get("/", async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
       SELECT DISTINCT c.name AS collection
-      FROM events e
-      JOIN collections c ON e.collection_id = c.id
+      FROM collections c
+      LEFT JOIN events e ON e.collection_id = c.id
       ORDER BY c.name ASC
     `);
+
     res.json(rows.map(r => r.collection));
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 // --- POST new collection ---
