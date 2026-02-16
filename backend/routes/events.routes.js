@@ -352,4 +352,63 @@ router.delete("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   }
 });
 
+// =========================
+//     GET ROUTE (TRACE ITINERAIRE)
+// =========================
+router.get("/route", async (req, res, next) => {
+  try {
+    const collection = req.query.collection || await getActiveCollection();
+    const mode = req.query.mode || "driving";
+
+    if (!["driving", "foot"].includes(mode)) {
+      return res.status(400).json({ error: "Invalid mode (driving | foot)" });
+    }
+
+    // 1️⃣ récupérer les events ordonnés
+    const { rows } = await pool.query(`
+      SELECT
+        ST_Y(location::geometry) AS latitude,
+        ST_X(location::geometry) AS longitude
+      FROM events
+      WHERE collection_id = (SELECT id FROM collections WHERE name = $1)
+      ORDER BY position ASC
+    `, [collection]);
+
+    if (rows.length < 2) {
+      return res.status(400).json({
+        error: "At least 2 events are required to build a route"
+      });
+    }
+
+    // 2️⃣ format OSRM : lng,lat
+    const coords = rows
+      .map(p => `${p.longitude},${p.latitude}`)
+      .join(";");
+
+    // 3️⃣ appel OSRM
+    const osrmUrl = `https://router.project-osrm.org/route/v1/${mode}/${coords}?overview=full&geometries=geojson`;
+
+    const response = await fetch(osrmUrl);
+    const data = await response.json();
+
+    if (!data.routes?.length) {
+      return res.status(404).json({ error: "No route found" });
+    }
+
+    // 4️⃣ réponse propre pour Leaflet
+    res.json({
+      collection,
+      mode,
+      distance: data.routes[0].distance, // mètres
+      duration: data.routes[0].duration, // secondes
+      geometry: data.routes[0].geometry
+    });
+
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+
 module.exports = router;

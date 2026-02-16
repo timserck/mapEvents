@@ -5,12 +5,14 @@ import "../leafletFix.js";
 import { createNumberedIcon, myPositionIcon, hotelIcon } from "../leaflet.js";
 import AdminPanel from "../components/AdminPanel.jsx";
 import MultiSelectDropdown from "../components/MultiSelectDropdown.jsx";
+import RouteToggleButton from "../components/RouteToggleButton.jsx";
+
 
 import { formatDate } from "../utils.js";
 import LazyImage from "../components/LazyImage.jsx";
 import { DEFAULT_IMAGE, CACHE_TTL, setCache, getCache } from "../cache.js";
 import L from "leaflet";
-import {apiFetch} from "../apiFetch.js";
+import { apiFetch } from "../apiFetch.js";
 import { toast } from "react-toastify";
 
 // Map center updater
@@ -44,7 +46,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
           );
           const data = await res.json();
           setUserAddress(data.display_name || null);
-        } catch {}
+        } catch { }
       },
       (err) => {
         toast.error("Impossible de récupérer votre position : " + err.message);
@@ -81,7 +83,7 @@ function GeolocateButton({ setUserPosition, setUserAddress }) {
   return null;
 }
 
-export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel }) {
+export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }) {
   const [activeCollection, setActiveCollection] = useState(() => localStorage.getItem("activeCollection") || "");
   const [publicCollection, setPublicCollection] = useState(null);
   const [events, setEvents] = useState([]);
@@ -97,38 +99,90 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
   const mapRef = useRef();
   const isAdmin = role === "admin";
 
+  const [showRoute, setShowRoute] = useState(false);
+  const [routeData, setRouteData] = useState(null);
+  const [routeMode, setRouteMode] = useState("foot"); // "foot" | "driving"
+  const routeLayerRef = useRef(null);
 
-      // Fetch event images
-      const fetchImagesForEvents = async (eventsList) => {
-        const updatedImages = {};
-        for (let ev of eventsList) {
-          const cacheKey = `event_image_${ev.id}`;
-          let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
-          if (imageUrl === DEFAULT_IMAGE) {
-            try {
-              const query = encodeURIComponent(ev.title);
-              const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
-              if (res.ok && res.url) imageUrl = res.url;
-            } catch {}
-          }
-          setCache(cacheKey, imageUrl, CACHE_TTL);
-          updatedImages[ev.id] = imageUrl;
-        }
-        setEventImages((prev) => ({ ...prev, ...updatedImages }));
-      };
-  
-    const fetchEvents = async () => {
-      try {
-        const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
-        const data = await res?.json() || [];
-        data.sort((a, b) => (a.position || 0) - (b.position || 0));
-        setEvents(data);
-        if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
-        fetchImagesForEvents(data);
-      } catch (err) {
-        console.error("Fetch events error:", err);
+
+
+  const toggleRoute = async () => {
+    if (!mapRef.current) return;
+
+    // 👉 cacher la route
+    if (showRoute) {
+      if (routeLayerRef.current) {
+        mapRef.current.removeLayer(routeLayerRef.current);
+        routeLayerRef.current = null;
       }
-    };
+      setShowRoute(false);
+      return;
+    }
+
+    try {
+      const res = await apiFetch(
+        `/events/route?collection=${encodeURIComponent(activeCollection)}&mode=${routeMode}`,
+        {},
+        logout
+      );
+
+      const data = await res.json();
+
+      const latlngs = data.geometry.coordinates.map(c => [c[1], c[0]]);
+
+      routeLayerRef.current = L.polyline(latlngs, {
+        color: routeMode === "foot" ? "green" : "blue",
+        weight: 5,
+        opacity: 0.8
+      }).addTo(mapRef.current);
+
+      mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
+        padding: [40, 40]
+      });
+
+      setRouteData(data);
+      setShowRoute(true);
+
+    } catch (err) {
+      toast.error("Impossible de charger l’itinéraire");
+      console.error(err);
+    }
+  };
+
+
+
+
+  // Fetch event images
+  const fetchImagesForEvents = async (eventsList) => {
+    const updatedImages = {};
+    for (let ev of eventsList) {
+      const cacheKey = `event_image_${ev.id}`;
+      let imageUrl = getCache(cacheKey) || DEFAULT_IMAGE;
+      if (imageUrl === DEFAULT_IMAGE) {
+        try {
+          const query = encodeURIComponent(ev.title);
+          const res = await fetch(`https://source.unsplash.com/400x300/?${query}`);
+          if (res.ok && res.url) imageUrl = res.url;
+        } catch { }
+      }
+      setCache(cacheKey, imageUrl, CACHE_TTL);
+      updatedImages[ev.id] = imageUrl;
+    }
+    setEventImages((prev) => ({ ...prev, ...updatedImages }));
+  };
+
+  const fetchEvents = async () => {
+    try {
+      const res = await apiFetch(`/events?collection=${encodeURIComponent(activeCollection)}`, {}, logout);
+      const data = await res?.json() || [];
+      data.sort((a, b) => (a.position || 0) - (b.position || 0));
+      setEvents(data);
+      if (!userHasMovedMap && data.length > 0) setCenter([data[0].latitude, data[0].longitude]);
+      fetchImagesForEvents(data);
+    } catch (err) {
+      console.error("Fetch events error:", err);
+    }
+  };
 
   // Save active collection
   useEffect(() => {
@@ -248,6 +302,13 @@ export default function MapPage({logout, role, isPanelOpen, onCloseAdminPanel })
           <MapCenterUpdater center={center} />
           <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <GeolocateButton setUserPosition={setUserPosition} setUserAddress={setUserAddress} />
+          <RouteToggleButton
+            toggleRoute={toggleRoute}
+            showRoute={showRoute}
+            routeMode={routeMode}
+            setRouteMode={setRouteMode}
+          />
+
 
           <MarkerClusterGroup>
             {filteredEvents.map((e, index) => (
