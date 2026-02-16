@@ -414,6 +414,21 @@ export default function AdminPanel({ refreshEvents, goToEvent, setActiveCollecti
                             <button onClick={() => goToEvent(e)} className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">Go To</button>
                             <button onClick={() => startEditing(e)} className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600">Éditer</button>
                             <button onClick={() => handleDelete(e.id)} className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Supprimer</button>
+                            <button
+                              onClick={async () => {
+                                await apiFetch(`/events/${e.id}/favorite`, {
+                                  method: "PATCH"
+                                }, logout);
+
+                                fetchAllEvents();
+                                refreshEvents();
+                              }}
+                              className={`px-2 py-1 rounded text-white ${e.favorite ? "bg-yellow-500 hover:bg-yellow-600" : "bg-gray-400 hover:bg-gray-500"
+                                }`}
+                              title="Favori"
+                            >
+                              {e.favorite ? "⭐" : "☆"}
+                            </button>
                           </td>
                         </tr>
                       )}

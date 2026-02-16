@@ -30,11 +30,12 @@ CREATE TABLE IF NOT EXISTS events (
     address TEXT,
     location GEOGRAPHY(POINT, 4326) NOT NULL,
     position INT DEFAULT 0,
-    collection_id INT NOT NULL REFERENCES collections(id) ON DELETE CASCADE
+    collection_id INT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    favorite BOOLEAN DEFAULT FALSE
 );
 
 -- Sample event
-INSERT INTO events (title, type, date, description, address, location, position, collection_id)
+INSERT INTO events (title, type, date, description, address, location, position, collection_id, favorite)
 VALUES (
     'Concert de Jazz',
     'Concert',
@@ -43,7 +44,8 @@ VALUES (
     'Paris, France',
     ST_GeogFromText('SRID=4326;POINT(2.3522 48.8566)'),
     1,
-    (SELECT id FROM collections WHERE name='Default')
+    (SELECT id FROM collections WHERE name='Default'),
+    FALSE
 )
 ON CONFLICT DO NOTHING;
 

@@ -410,5 +410,34 @@ router.get("/route", async (req, res, next) => {
 });
 
 
+// =========================
+//     TOGGLE FAVORITE
+// =========================
+router.patch("/:id/favorite", authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `
+      UPDATE events
+      SET favorite = NOT favorite
+      WHERE id = $1
+      RETURNING id, favorite
+      `,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+
 
 module.exports = router;
