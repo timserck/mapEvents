@@ -21,11 +21,18 @@ export function getTypeColor(type = "default") {
 }
 
 // 🧩 Créer un marker numéroté coloré selon le type
-export function createNumberedIcon(number, type = "default") {
+export function createNumberedIcon(number, type = "default", favorite = false) {
   // Si type est "hotel", utiliser l'icône CDN
   if (type.toLowerCase() === "hotel") return hotelIcon;
 
   const color = getTypeColor(type);
+
+  // ⭐ Bordure spéciale si favori
+  const borderColor = favorite ? "#FFD700" : "white"; // or gold
+  const borderWidth = favorite ? "3px" : "2px";
+  const boxShadow = favorite
+    ? "0 0 8px rgba(255,215,0,0.9)"
+    : "0 0 4px rgba(0,0,0,0.4)";
 
   return L.divIcon({
     html: `
@@ -39,8 +46,8 @@ export function createNumberedIcon(number, type = "default") {
         justify-content:center;
         color:white;
         font-weight:bold;
-        border:2px solid white;
-        box-shadow:0 0 4px rgba(0,0,0,0.4);
+        border:${borderWidth} solid ${borderColor};
+        box-shadow:${boxShadow};
       ">
         ${number}
       </div>
@@ -51,6 +58,7 @@ export function createNumberedIcon(number, type = "default") {
     popupAnchor: [0, -28],
   });
 }
+
 
 export const myPositionIcon = L.icon({
   iconUrl: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
