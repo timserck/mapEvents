@@ -9,6 +9,44 @@ const {
 } = require("../utils/helpers");
 
 /* =========================================================
+   GPT EVENTS
+========================================================= */
+router.post("/gpt-events", authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    const { prompt, collection } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    const userPrompt = `
+Generate a JSON object in this exact format:
+{
+  "title": "...",
+  "type": "...",
+  "date": "${new Date().toISOString()}",
+  "description": "...",
+  "address": "...",
+  "latitude": 0,
+  "longitude": 0,
+  "collection": "${collection || "Default"}"
+}
+`;
+
+    const response = await fetch("http://localhost:5000/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: userPrompt, max_tokens: 300 })
+    });
+
+    const data = await response.json();
+    const content = data.completion?.trim();
+    if (!content) return res.status(500).json({ error: "No content returned" });
+
+    res.json(JSON.parse(content));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =========================================================
    GET EVENTS
 ========================================================= */
 router.get("/", async (req, res, next) => {
@@ -66,7 +104,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
       const posRes = await pool.query(
         `SELECT COALESCE(MAX(position),0)+1 AS next
          FROM events
-         WHERE collection_id = (SELECT id FROM collections WHERE name = $1)`,
+         WHERE collection_id = (SELECT id FROM collections WHERE name=$1)`,
         [collection]
       );
       position = posRes.rows[0].next;
@@ -75,22 +113,22 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
     const existsRes = await pool.query(`
       SELECT 1
       FROM events
-      WHERE collection_id = (SELECT id FROM collections WHERE name = $1)
+      WHERE collection_id = (SELECT id FROM collections WHERE name=$1)
         AND ST_DWithin(
           location,
-          ST_SetSRID(ST_MakePoint($2, $3), 4326),
+          ST_SetSRID(ST_MakePoint($2,$3),4326),
           0
         )
       LIMIT 1
     `, [collection, longitude, latitude]);
 
     if (existsRes.rowCount > 0) {
-      return res.status(409).json({ error: "An event already exists at this location" });
+      return res.status(409).json({ error: "Event already exists at this location" });
     }
 
     const result = await pool.query(`
       INSERT INTO events
-        (title, type, date, description, address, location, position, collection_id, favorite)
+        (title,type,date,description,address,location,position,collection_id,favorite)
       VALUES
         ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,
          (SELECT id FROM collections WHERE name=$8),
@@ -141,23 +179,6 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    const existsRes = await pool.query(`
-      SELECT 1
-      FROM events
-      WHERE id <> $1
-        AND collection_id = (SELECT id FROM collections WHERE name = $2)
-        AND ST_DWithin(
-          location,
-          ST_SetSRID(ST_MakePoint($3, $4), 4326),
-          0
-        )
-      LIMIT 1
-    `, [id, collection, longitude, latitude]);
-
-    if (existsRes.rowCount > 0) {
-      return res.status(409).json({ error: "Another event already exists at this location" });
-    }
-
     const result = await pool.query(`
       UPDATE events
       SET
@@ -169,7 +190,7 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
         location=ST_GeogFromText($6),
         collection_id=(SELECT id FROM collections WHERE name=$7),
         position=$8,
-        favorite=COALESCE($9, favorite)
+        favorite=COALESCE($9,favorite)
       WHERE id=$10
       RETURNING
         id,title,type,date,description,address,position,favorite,
@@ -263,7 +284,6 @@ router.post("/bulk", authMiddleware, adminMiddleware, async (req, res, next) => 
 ========================================================= */
 router.patch("/reorder", authMiddleware, adminMiddleware, async (req, res, next) => {
   const { orderedIds } = req.body;
-
   if (!Array.isArray(orderedIds) || !orderedIds.length) {
     return res.status(400).json({ error: "orderedIds array required" });
   }
@@ -271,15 +291,51 @@ router.patch("/reorder", authMiddleware, adminMiddleware, async (req, res, next)
   try {
     await pool.query("BEGIN");
     for (let i = 0; i < orderedIds.length; i++) {
-      await pool.query(
-        "UPDATE events SET position=$1 WHERE id=$2",
-        [i + 1, orderedIds[i]]
-      );
+      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [i + 1, orderedIds[i]]);
     }
     await pool.query("COMMIT");
     res.json({ success: true });
   } catch (err) {
     await pool.query("ROLLBACK");
+    next(err);
+  }
+});
+
+/* =========================================================
+   ROUTE ITINERAIRE
+========================================================= */
+router.get("/route", async (req, res, next) => {
+  try {
+    const collection = req.query.collection || await getActiveCollection();
+    const mode = req.query.mode || "driving";
+
+    const { rows } = await pool.query(`
+      SELECT
+        ST_Y(location::geometry) AS latitude,
+        ST_X(location::geometry) AS longitude
+      FROM events
+      WHERE collection_id = (SELECT id FROM collections WHERE name=$1)
+      ORDER BY position ASC
+    `, [collection]);
+
+    if (rows.length < 2) {
+      return res.status(400).json({ error: "At least 2 points required" });
+    }
+
+    const coords = rows.map(p => `${p.longitude},${p.latitude}`).join(";");
+    const url = `https://router.project-osrm.org/route/v1/${mode}/${coords}?overview=full&geometries=geojson`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    res.json({
+      collection,
+      mode,
+      distance: data.routes[0].distance,
+      duration: data.routes[0].duration,
+      geometry: data.routes[0].geometry
+    });
+  } catch (err) {
     next(err);
   }
 });
@@ -294,8 +350,8 @@ router.patch("/:id/favorite", authMiddleware, adminMiddleware, async (req, res, 
     const result = await pool.query(`
       UPDATE events
       SET favorite = NOT favorite
-      WHERE id = $1
-      RETURNING id, favorite
+      WHERE id=$1
+      RETURNING id,favorite
     `, [id]);
 
     if (!result.rows.length) {
