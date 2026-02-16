@@ -8,101 +8,41 @@ const {
   ensureLatLng
 } = require("../utils/helpers");
 
-
-// =========================
-//        GPT EVENTS
-// =========================
-router.post("/gpt-events", authMiddleware, adminMiddleware, async (req, res, next) => {
-  try {
-    const { prompt, collection } = req.body;
-    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
-
-    const system = "You are a helpful assistant that generates structured event data for travel apps. Output only valid JSON — no text or markdown.";
-
-    const userPrompt = `
-Generate a JSON object in this exact format:
-{
-  "title": "...",
-  "type": "...",
-  "date": "${new Date().toISOString()}",
-  "description": "...",
-  "address": "...",
-  "latitude": 0,
-  "longitude": 0,
-  "collection": "${collection || "Default"}"
-}
-
-The event is based on this description: "${prompt}".
-Fill title, type, description, address and realistic coordinates.
-`;
-
-    // Local llama.cpp REST API endpoint
-    const LOCAL_API_URL = "http://localhost:5000/completions";
-
-    const payload = {
-      prompt: userPrompt,
-      max_tokens: 300,     // adjust based on memory
-      temperature: 0.7
-    };
-
-    const response = await fetch(LOCAL_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      return res.status(500).json({ error: "Local API request failed", details: errorData });
-    }
-
-    const data = await response.json();
-    // llama.cpp REST API returns: { "completion": "..." }
-    const content = data.completion?.trim();
-    if (!content) return res.status(500).json({ error: "No content returned from local model" });
-
-    // Parse JSON
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch (err) {
-      return res.status(500).json({ error: "Invalid JSON from local model", raw: content });
-    }
-
-    res.json(parsed);
-
-  } catch (err) {
-    console.error("Local GPT proxy error:", err);
-    next(err);
-  }
-});
-
-
-// =========================
-//        GET EVENTS
-// =========================
+/* =========================================================
+   GET EVENTS
+========================================================= */
 router.get("/", async (req, res, next) => {
   try {
     const collection = req.query.collection || await getActiveCollection();
+
     const { rows } = await pool.query(`
-      SELECT e.id, e.title, e.type, e.date, e.description, e.address, e.position, 
-             ST_Y(e.location::geometry) AS latitude,
-             ST_X(e.location::geometry) AS longitude,
-             c.name AS collection
+      SELECT
+        e.id,
+        e.title,
+        e.type,
+        e.date,
+        e.description,
+        e.address,
+        e.position,
+        e.favorite,
+        ST_Y(e.location::geometry) AS latitude,
+        ST_X(e.location::geometry) AS longitude,
+        c.name AS collection
       FROM events e
       JOIN collections c ON e.collection_id = c.id
       WHERE c.name = $1
       ORDER BY e.position ASC
     `, [collection]);
+
     res.json(rows);
   } catch (err) {
     next(err);
   }
 });
 
-// =========================
-//        CREATE EVENT
-// =========================
+/* =========================================================
+   CREATE EVENT
+========================================================= */
 router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     let {
@@ -115,14 +55,13 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
       address,
       position,
       collection,
+      favorite = false
     } = req.body;
 
     collection ||= "Default";
-
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    // Auto-position if missing
     if (!position) {
       const posRes = await pool.query(
         `SELECT COALESCE(MAX(position),0)+1 AS next
@@ -133,9 +72,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
       position = posRes.rows[0].next;
     }
 
-    // 🔒 DUPLICATE CHECK (lat/lng only)
-    const existsRes = await pool.query(
-      `
+    const existsRes = await pool.query(`
       SELECT 1
       FROM events
       WHERE collection_id = (SELECT id FROM collections WHERE name = $1)
@@ -145,39 +82,34 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
           0
         )
       LIMIT 1
-      `,
-      [collection, longitude, latitude]
-    );
+    `, [collection, longitude, latitude]);
 
     if (existsRes.rowCount > 0) {
-      return res.status(409).json({
-        error: "An event already exists at this location",
-      });
+      return res.status(409).json({ error: "An event already exists at this location" });
     }
 
-    // ✅ INSERT
-    const result = await pool.query(
-      `
+    const result = await pool.query(`
       INSERT INTO events
-        (title, type, date, description, address, location, position, collection_id)
+        (title, type, date, description, address, location, position, collection_id, favorite)
       VALUES
-        ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,(SELECT id FROM collections WHERE name=$8))
+        ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,
+         (SELECT id FROM collections WHERE name=$8),
+         $9)
       RETURNING
-        id,title,type,date,description,address,position,
+        id,title,type,date,description,address,position,favorite,
         ST_Y(location::geometry) AS latitude,
         ST_X(location::geometry) AS longitude
-      `,
-      [
-        title,
-        type,
-        date,
-        description,
-        address,
-        `SRID=4326;POINT(${longitude} ${latitude})`,
-        position,
-        collection,
-      ]
-    );
+    `, [
+      title,
+      type,
+      date,
+      description,
+      address,
+      `SRID=4326;POINT(${longitude} ${latitude})`,
+      position,
+      collection,
+      favorite
+    ]);
 
     res.json({ ...result.rows[0], collection });
   } catch (err) {
@@ -185,11 +117,9 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   }
 });
 
-
-
-// =========================
-//        UPDATE EVENT
-// =========================
+/* =========================================================
+   UPDATE EVENT
+========================================================= */
 router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -204,16 +134,14 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
       longitude,
       collection,
       position,
+      favorite
     } = req.body;
 
     collection ||= "Default";
-
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    // 🔒 DUPLICATE CHECK (lat/lng only, exclude current event)
-    const existsRes = await pool.query(
-      `
+    const existsRes = await pool.query(`
       SELECT 1
       FROM events
       WHERE id <> $1
@@ -224,46 +152,41 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
           0
         )
       LIMIT 1
-      `,
-      [id, collection, longitude, latitude]
-    );
+    `, [id, collection, longitude, latitude]);
 
     if (existsRes.rowCount > 0) {
-      return res.status(409).json({
-        error: "Another event already exists at this location",
-      });
+      return res.status(409).json({ error: "Another event already exists at this location" });
     }
 
-    // ✅ UPDATE
-    const result = await pool.query(
-      `
+    const result = await pool.query(`
       UPDATE events
-      SET title=$1,
-          type=$2,
-          date=$3,
-          description=$4,
-          address=$5,
-          location=ST_GeogFromText($6),
-          collection_id=(SELECT id FROM collections WHERE name=$7),
-          position=$8
-      WHERE id=$9
+      SET
+        title=$1,
+        type=$2,
+        date=$3,
+        description=$4,
+        address=$5,
+        location=ST_GeogFromText($6),
+        collection_id=(SELECT id FROM collections WHERE name=$7),
+        position=$8,
+        favorite=COALESCE($9, favorite)
+      WHERE id=$10
       RETURNING
-        id,title,type,date,description,address,position,
+        id,title,type,date,description,address,position,favorite,
         ST_Y(location::geometry) AS latitude,
         ST_X(location::geometry) AS longitude
-      `,
-      [
-        title,
-        type,
-        date,
-        description,
-        address,
-        `SRID=4326;POINT(${longitude} ${latitude})`,
-        collection,
-        position,
-        id,
-      ]
-    );
+    `, [
+      title,
+      type,
+      date,
+      description,
+      address,
+      `SRID=4326;POINT(${longitude} ${latitude})`,
+      collection,
+      position,
+      favorite,
+      id
+    ]);
 
     if (!result.rows.length) {
       return res.status(404).json({ error: "Event not found" });
@@ -275,10 +198,9 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
   }
 });
 
-
-// =========================
-//        DELETE EVENT
-// =========================
+/* =========================================================
+   DELETE EVENT
+========================================================= */
 router.delete("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     await pool.query("DELETE FROM events WHERE id=$1", [req.params.id]);
@@ -288,144 +210,93 @@ router.delete("/:id", authMiddleware, adminMiddleware, async (req, res, next) =>
   }
 });
 
-// =========================
-//        BULK CREATE
-// =========================
+/* =========================================================
+   BULK CREATE
+========================================================= */
 router.post("/bulk", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const { events, collection } = req.body;
     const collectionName = collection || "Default";
-    if (!Array.isArray(events) || !events.length) return res.status(400).json({ error: "Events array required" });
+
+    if (!Array.isArray(events) || !events.length) {
+      return res.status(400).json({ error: "Events array required" });
+    }
 
     const inserted = [];
+
     for (const ev of events) {
       const date = validateEventFields(ev);
       const { latitude, longitude } = await ensureLatLng(ev);
-      const result = await pool.query(
-        `INSERT INTO events (title,type,date,description,address,location,collection_id)
-         VALUES ($1,$2,$3,$4,$5,ST_GeogFromText($6),(SELECT id FROM collections WHERE name=$7))
-         RETURNING id,title,type,date,description,address,position,
-                   ST_Y(location::geometry) AS latitude,
-                   ST_X(location::geometry) AS longitude`,
-        [ev.title, ev.type, date, ev.description, ev.address, `SRID=4326;POINT(${longitude} ${latitude})`, collectionName]
-      );
+
+      const result = await pool.query(`
+        INSERT INTO events
+          (title,type,date,description,address,location,collection_id,favorite)
+        VALUES
+          ($1,$2,$3,$4,$5,ST_GeogFromText($6),
+           (SELECT id FROM collections WHERE name=$7),
+           FALSE)
+        RETURNING
+          id,title,type,date,description,address,position,favorite,
+          ST_Y(location::geometry) AS latitude,
+          ST_X(location::geometry) AS longitude
+      `, [
+        ev.title,
+        ev.type,
+        date,
+        ev.description,
+        ev.address,
+        `SRID=4326;POINT(${longitude} ${latitude})`,
+        collectionName
+      ]);
+
       inserted.push({ ...result.rows[0], collection: collectionName });
     }
+
     res.json(inserted);
   } catch (err) {
     next(err);
   }
 });
 
-// =========================
-//        REORDER EVENTS
-// =========================
+/* =========================================================
+   REORDER EVENTS
+========================================================= */
 router.patch("/reorder", authMiddleware, adminMiddleware, async (req, res, next) => {
   const { orderedIds } = req.body;
+
   if (!Array.isArray(orderedIds) || !orderedIds.length) {
     return res.status(400).json({ error: "orderedIds array required" });
   }
+
   try {
     await pool.query("BEGIN");
     for (let i = 0; i < orderedIds.length; i++) {
-      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [i + 1, orderedIds[i]]);
+      await pool.query(
+        "UPDATE events SET position=$1 WHERE id=$2",
+        [i + 1, orderedIds[i]]
+      );
     }
     await pool.query("COMMIT");
-    res.json({ success: true, message: "Events reordered successfully" });
+    res.json({ success: true });
   } catch (err) {
     await pool.query("ROLLBACK");
     next(err);
   }
 });
 
-// =========================
-//     DELETE ALL EVENTS FROM COLLECTION
-// =========================
-router.delete("/", authMiddleware, adminMiddleware, async (req, res, next) => {
-  try {
-    const { collection } = req.query;
-    if (!collection) return res.status(400).json({ error: "collection query required" });
-    await pool.query("DELETE FROM events WHERE collection_id=(SELECT id FROM collections WHERE name=$1)", [collection]);
-    res.json({ success: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// =========================
-//     GET ROUTE (TRACE ITINERAIRE)
-// =========================
-router.get("/route", async (req, res, next) => {
-  try {
-    const collection = req.query.collection || await getActiveCollection();
-    const mode = req.query.mode || "driving";
-
-    if (!["driving", "foot"].includes(mode)) {
-      return res.status(400).json({ error: "Invalid mode (driving | foot)" });
-    }
-
-    // 1️⃣ récupérer les events ordonnés
-    const { rows } = await pool.query(`
-      SELECT
-        ST_Y(location::geometry) AS latitude,
-        ST_X(location::geometry) AS longitude
-      FROM events
-      WHERE collection_id = (SELECT id FROM collections WHERE name = $1)
-      ORDER BY position ASC
-    `, [collection]);
-
-    if (rows.length < 2) {
-      return res.status(400).json({
-        error: "At least 2 events are required to build a route"
-      });
-    }
-
-    // 2️⃣ format OSRM : lng,lat
-    const coords = rows
-      .map(p => `${p.longitude},${p.latitude}`)
-      .join(";");
-
-    // 3️⃣ appel OSRM
-    const osrmUrl = `https://router.project-osrm.org/route/v1/${mode}/${coords}?overview=full&geometries=geojson`;
-
-    const response = await fetch(osrmUrl);
-    const data = await response.json();
-
-    if (!data.routes?.length) {
-      return res.status(404).json({ error: "No route found" });
-    }
-
-    // 4️⃣ réponse propre pour Leaflet
-    res.json({
-      collection,
-      mode,
-      distance: data.routes[0].distance, // mètres
-      duration: data.routes[0].duration, // secondes
-      geometry: data.routes[0].geometry
-    });
-
-  } catch (err) {
-    next(err);
-  }
-});
-
-
-// =========================
-//     TOGGLE FAVORITE
-// =========================
+/* =========================================================
+   TOGGLE FAVORITE
+========================================================= */
 router.patch("/:id/favorite", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      `
+    const result = await pool.query(`
       UPDATE events
       SET favorite = NOT favorite
       WHERE id = $1
       RETURNING id, favorite
-      `,
-      [id]
-    );
+    `, [id]);
 
     if (!result.rows.length) {
       return res.status(404).json({ error: "Event not found" });
@@ -436,8 +307,5 @@ router.patch("/:id/favorite", authMiddleware, adminMiddleware, async (req, res, 
     next(err);
   }
 });
-
-
-
 
 module.exports = router;
