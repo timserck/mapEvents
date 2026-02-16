@@ -107,7 +107,7 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
 
   const toggleRoute = async () => {
     if (!mapRef.current) return;
-  
+
     // 👉 cacher la route
     if (showRoute) {
       if (routeLayerRef.current) {
@@ -117,65 +117,57 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
       setShowRoute(false);
       return;
     }
-  
+
     try {
-      // ⭐ 1️⃣ récupérer uniquement les favoris
+      // ⭐ récupérer uniquement les favoris du frontend
       const favoriteEvents = filteredEvents
         .filter(e => e.favorite)
         .sort((a, b) => a.position - b.position);
-  
+
       if (favoriteEvents.length < 2) {
         toast.warning("Sélectionne au moins 2 événements favoris");
         return;
       }
-  
-      // 2️⃣ format OSRM : lng,lat
-      const coords = favoriteEvents
-        .map(e => `${e.longitude},${e.latitude}`)
-        .join(";");
-  
-      // 3️⃣ OSRM
+
+      // 🔹 format OSRM : lng,lat
+      const coords = favoriteEvents.map(e => `${e.longitude},${e.latitude}`).join(";");
+
+      // 🔹 OSRM
       const osrmUrl = `https://router.project-osrm.org/route/v1/${routeMode}/${coords}?overview=full&geometries=geojson`;
-  
       const response = await fetch(osrmUrl);
       const data = await response.json();
-  
+
       if (!data.routes?.length) {
         toast.error("Aucun itinéraire trouvé");
         return;
       }
-  
-      const latlngs = data.routes[0].geometry.coordinates.map(
-        ([lng, lat]) => [lat, lng]
-      );
-  
-      // 4️⃣ tracer
+
+      const latlngs = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+
+      // 🔹 tracer la route
       routeLayerRef.current = L.polyline(latlngs, {
         color: routeMode === "foot" ? "green" : "blue",
         weight: 5,
         opacity: 0.8
       }).addTo(mapRef.current);
-  
+
       mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
         padding: [40, 40]
       });
-  
+
       setRouteData({
         mode: routeMode,
         distance: data.routes[0].distance,
         duration: data.routes[0].duration
       });
-  
+
       setShowRoute(true);
-  
+
     } catch (err) {
       toast.error("Impossible de charger l’itinéraire");
       console.error(err);
     }
   };
-  
-
-
 
 
   // Fetch event images
@@ -285,14 +277,28 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
       e.title.toLowerCase().includes(searchName.toLowerCase())
   );
 
+  // Keep track of previous filtered events to avoid route disappearing immediately
+  const filteredEventsRef = useRef(filteredEvents);
+
   useEffect(() => {
-    if (showRoute && routeLayerRef.current && mapRef.current) {
+    if (!showRoute) {
+      filteredEventsRef.current = filteredEvents;
+      return;
+    }
+
+    // Only remove route if filteredEvents changed meaningfully
+    const prevIds = filteredEventsRef.current.map(e => e.id).join(",");
+    const newIds = filteredEvents.map(e => e.id).join(",");
+
+    if (prevIds !== newIds && routeLayerRef.current && mapRef.current) {
       mapRef.current.removeLayer(routeLayerRef.current);
       routeLayerRef.current = null;
       setShowRoute(false);
       setRouteData(null);
     }
-  }, [filteredEvents, activeCollection, routeMode]);
+
+    filteredEventsRef.current = filteredEvents;
+  }, [filteredEvents, activeCollection, routeMode, showRoute]);
 
   return (
     <div className="flex h-screen">

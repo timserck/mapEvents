@@ -315,6 +315,7 @@ router.get("/route", async (req, res, next) => {
         ST_X(location::geometry) AS longitude
       FROM events
       WHERE collection_id = (SELECT id FROM collections WHERE name=$1)
+        AND favorite = true      -- ✅ filtre les favoris uniquement
       ORDER BY position ASC
     `, [collection]);
 
@@ -339,6 +340,7 @@ router.get("/route", async (req, res, next) => {
     next(err);
   }
 });
+
 
 /* =========================================================
    TOGGLE FAVORITE
