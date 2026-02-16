@@ -120,7 +120,7 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
   
     try {
       // ⭐ 1️⃣ récupérer uniquement les favoris
-      const favoriteEvents = events
+      const favoriteEvents = filteredEvents
         .filter(e => e.favorite)
         .sort((a, b) => a.position - b.position);
   
@@ -175,7 +175,14 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
   };
   
 
-
+  useEffect(() => {
+    if (showRoute && routeLayerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(routeLayerRef.current);
+      routeLayerRef.current = null;
+      setShowRoute(false);
+      setRouteData(null);
+    }
+  }, [filteredEvents, activeCollection, routeMode]);
 
 
   // Fetch event images
