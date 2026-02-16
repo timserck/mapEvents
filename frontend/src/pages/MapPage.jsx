@@ -175,14 +175,7 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
   };
   
 
-  useEffect(() => {
-    if (showRoute && routeLayerRef.current && mapRef.current) {
-      mapRef.current.removeLayer(routeLayerRef.current);
-      routeLayerRef.current = null;
-      setShowRoute(false);
-      setRouteData(null);
-    }
-  }, [filteredEvents, activeCollection, routeMode]);
+
 
 
   // Fetch event images
@@ -291,6 +284,15 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
       (filterDate.includes("all") || filterDate.includes(formatDate(e.date))) &&
       e.title.toLowerCase().includes(searchName.toLowerCase())
   );
+
+  useEffect(() => {
+    if (showRoute && routeLayerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(routeLayerRef.current);
+      routeLayerRef.current = null;
+      setShowRoute(false);
+      setRouteData(null);
+    }
+  }, [filteredEvents, activeCollection, routeMode]);
 
   return (
     <div className="flex h-screen">
