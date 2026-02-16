@@ -34,6 +34,18 @@ CREATE TABLE IF NOT EXISTS events (
     favorite BOOLEAN DEFAULT FALSE
 );
 
+-- ===============================
+-- Ajout du champ favorite si manquant
+-- ===============================
+ALTER TABLE events
+ADD COLUMN IF NOT EXISTS favorite BOOLEAN DEFAULT FALSE;
+
+-- Mettre à jour les anciennes lignes (optionnel si tu veux forcer FALSE)
+UPDATE events
+SET favorite = FALSE
+WHERE favorite IS NULL;
+
+
 -- Sample event
 INSERT INTO events (title, type, date, description, address, location, position, collection_id, favorite)
 VALUES (
