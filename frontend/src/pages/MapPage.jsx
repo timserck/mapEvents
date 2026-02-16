@@ -315,7 +315,7 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
               <Marker
                 key={e.id}
                 position={[e.latitude, e.longitude]}
-                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(e.position || index + 1, e.type)}
+                icon={e.type.toLowerCase() === "hotel" ? hotelIcon : createNumberedIcon(e.position || index + 1, e.type, e.favorite)}
               >
                 <Popup minWidth={250}>
                   <strong>{(e.position || index + 1)}. {e.title}</strong>
