@@ -298,7 +298,7 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
     }
 
     filteredEventsRef.current = filteredEvents;
-  }, [filteredEvents, activeCollection, routeMode, showRoute]);
+  }, [filteredEvents, activeCollection, routeMode, showRoute, events]);
 
   return (
     <div className="flex h-screen">
