@@ -119,6 +119,13 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
     }
 
     try {
+      
+      const filteredEvents = events.filter(
+        (e) =>
+          (filterType.includes("all") || filterType.includes(e.type)) &&
+          (filterDate.includes("all") || filterDate.includes(formatDate(e.date))) &&
+          e.title.toLowerCase().includes(searchName.toLowerCase())
+      );
       // ⭐ récupérer uniquement les favoris du frontend
       const favoriteEvents = filteredEvents
         .filter(e => e.favorite)
