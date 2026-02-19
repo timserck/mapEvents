@@ -1,32 +1,37 @@
-# Use Node 20 on Debian Bookworm (multi-arch, better for Raspberry Pi)
-FROM node:20-bookworm-slim
+# =========================
+# Build stage
+# =========================
+FROM node:20-bookworm-slim AS build
 
-# Lower memory usage for install and build
 ENV npm_config_jobs=1 \
     npm_config_loglevel=warn \
     npm_config_progress=false \
     NODE_OPTIONS=--max-old-space-size=512
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
 ARG REACT_APP_API_URL
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
-COPY package*.json ./
 
-# Install dependencies (no lockfile present)
+COPY package*.json ./
 RUN npm install --legacy-peer-deps --no-audit --no-fund
 
-# Copy source code
 COPY . .
-
-# Build the app
 RUN npm run build
 
-# Install serve to serve production build
+
+# =========================
+# Runtime stage (SMALL)
+# =========================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install serve only in final image
 RUN npm install -g serve
 
-# Expose port and run the app
+# Copy ONLY the build output
+COPY --from=build /app/build ./build
+
 EXPOSE 3000
 CMD ["serve", "-s", "build", "-l", "3000"]
