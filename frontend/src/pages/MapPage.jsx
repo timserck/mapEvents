@@ -104,76 +104,20 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
   const [routeMode, setRouteMode] = useState("foot"); // "foot" | "driving"
   const routeLayerRef = useRef(null);
 
-
   const toggleRoute = async () => {
     if (!mapRef.current) return;
-
-    // 👉 cacher la route
+  
     if (showRoute) {
       if (routeLayerRef.current) {
         mapRef.current.removeLayer(routeLayerRef.current);
         routeLayerRef.current = null;
       }
       setShowRoute(false);
+      setRouteData(null);
       return;
     }
-
-    try {
-      
-      const filteredEvents = events.filter(
-        (e) =>
-          (filterType.includes("all") || filterType.includes(e.type)) &&
-          (filterDate.includes("all") || filterDate.includes(formatDate(e.date))) &&
-          e.title.toLowerCase().includes(searchName.toLowerCase())
-      );
-      // ⭐ récupérer uniquement les favoris du frontend
-      const favoriteEvents = filteredEvents
-        .filter(e => e.favorite)
-        .sort((a, b) => a.position - b.position);
-
-      if (favoriteEvents.length < 2) {
-        toast.warning("Sélectionne au moins 2 événements favoris");
-        return;
-      }
-
-      // 🔹 format OSRM : lng,lat
-      const coords = favoriteEvents.map(e => `${e.longitude},${e.latitude}`).join(";");
-
-      // 🔹 OSRM
-      const osrmUrl = `https://router.project-osrm.org/route/v1/${routeMode}/${coords}?overview=full&geometries=geojson`;
-      const response = await fetch(osrmUrl);
-      const data = await response.json();
-
-      if (!data.routes?.length) {
-        toast.error("Aucun itinéraire trouvé");
-        return;
-      }
-
-      const latlngs = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-
-      // 🔹 tracer la route
-      routeLayerRef.current = L.polyline(latlngs, {
-        color: routeMode === "foot" ? "green" : "blue",
-        weight: 5,
-        opacity: 0.8
-      }).addTo(mapRef.current);
-
-      mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
-        padding: [40, 40]
-      });
-
-      setRouteData({
-        mode: routeMode,
-        distance: data.routes[0].distance,
-        duration: data.routes[0].duration
-      });
-
-      setShowRoute(true);
-
-    } catch (err) {
-      toast.error("Impossible de charger l’itinéraire");
-      console.error(err);
-    }
+  
+    await buildRoute();
   };
 
 
@@ -306,6 +250,81 @@ export default function MapPage({ logout, role, isPanelOpen, onCloseAdminPanel }
 
     filteredEventsRef.current = filteredEvents;
   }, [filteredEvents, activeCollection, routeMode, showRoute, events]);
+
+
+  const buildRoute = async () => {
+    if (!mapRef.current) return;
+  
+    try {
+      const filteredEvents = events.filter(
+        (e) =>
+          (filterType.includes("all") || filterType.includes(e.type)) &&
+          (filterDate.includes("all") || filterDate.includes(formatDate(e.date))) &&
+          e.title.toLowerCase().includes(searchName.toLowerCase())
+      );
+  
+      const favoriteEvents = filteredEvents
+        .filter(e => e.favorite)
+        .sort((a, b) => a.position - b.position);
+  
+      if (favoriteEvents.length < 2) {
+        toast.warning("Sélectionne au moins 2 événements favoris");
+        return;
+      }
+  
+      const coords = favoriteEvents
+        .map(e => `${e.longitude},${e.latitude}`)
+        .join(";");
+  
+      const osrmUrl =
+        `https://router.project-osrm.org/route/v1/${routeMode}/${coords}?overview=full&geometries=geojson`;
+  
+      const response = await fetch(osrmUrl);
+      const data = await response.json();
+  
+      if (!data.routes?.length) return;
+  
+      const latlngs = data.routes[0].geometry.coordinates.map(
+        ([lng, lat]) => [lat, lng]
+      );
+  
+      // 🔴 remove old route
+      if (routeLayerRef.current) {
+        mapRef.current.removeLayer(routeLayerRef.current);
+      }
+  
+      routeLayerRef.current = L.polyline(latlngs, {
+        color: routeMode === "foot" ? "green" : "blue",
+        weight: 5,
+        opacity: 0.8
+      }).addTo(mapRef.current);
+  
+      mapRef.current.fitBounds(routeLayerRef.current.getBounds(), {
+        padding: [40, 40]
+      });
+  
+      setRouteData({
+        mode: routeMode,
+        distance: data.routes[0].distance,
+        duration: data.routes[0].duration
+      });
+  
+      setShowRoute(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Impossible de recalculer l’itinéraire");
+    }
+  };
+
+
+  useEffect(() => {
+    if (!showRoute) return;
+    buildRoute();
+  }, [
+    events,
+    routeMode
+  ]);
+
 
   return (
     <div className="flex h-screen">
