@@ -1,20 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../db");
 const { authMiddleware, adminMiddleware } = require("../middlewares/auth");
 const { getActiveCollection } = require("../utils/helpers");
+const prisma = require("../prismaClient");
 
 // --- GET all collections ---
 router.get("/", async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`
-      SELECT DISTINCT c.name AS collection
-      FROM collections c
-      LEFT JOIN events e ON e.collection_id = c.id
-      ORDER BY c.name ASC
-    `);
+    const collections = await prisma.collection.findMany({
+      orderBy: { name: "asc" }
+    });
 
-    res.json(rows.map(r => r.collection));
+    res.json(collections.map(c => c.name));
   } catch (err) {
     next(err);
   }
@@ -24,13 +21,15 @@ router.get("/", async (req, res, next) => {
 router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const { name } = req.body;
-    const result = await pool.query(
-      `INSERT INTO collections (name) VALUES ($1) RETURNING *`,
-      [name]
-    );
-    res.json(result.rows[0]);
+    const collection = await prisma.collection.create({
+      data: { name }
+    });
+    res.json(collection);
   } catch (err) {
-    if (err.code === "23505") return res.status(400).json({ error: "Collection already exists" });
+    // Unique constraint violation
+    if (err.code === "P2002" || err?.meta?.target?.includes("name")) {
+      return res.status(400).json({ error: "Collection already exists" });
+    }
     next(err);
   }
 });
@@ -39,8 +38,9 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
 router.delete("/:name", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const name = decodeURIComponent(req.params.name);
-    await pool.query("DELETE FROM events WHERE collection_id = (SELECT id FROM collections WHERE name=$1)", [name]);
-    await pool.query("DELETE FROM collections WHERE name=$1", [name]);
+    await prisma.collection.delete({
+      where: { name }
+    });
     res.json({ success: true });
   } catch (err) { next(err); }
 });
@@ -50,11 +50,11 @@ router.post("/activate", authMiddleware, adminMiddleware, async (req, res, next)
   try {
     const collection = req.body.collection || req.body.name;
     if (!collection) return res.status(400).json({ error: "collection required" });
-    await pool.query(`
-      INSERT INTO active_collection (id, collection_name)
-      VALUES (1, $1)
-      ON CONFLICT (id) DO UPDATE SET collection_name = EXCLUDED.collection_name
-    `, [collection]);
+    await prisma.activeCollection.upsert({
+      where: { id: 1 },
+      update: { collectionName: collection },
+      create: { id: 1, collectionName: collection }
+    });
     res.json({ success: true, activeCollection: collection });
   } catch (err) { next(err); }
 });

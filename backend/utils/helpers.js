@@ -1,5 +1,5 @@
 const fetch = require("node-fetch");
-const pool = require("../db");
+const prisma = require("../prismaClient");
 
 async function geocodeAddress(address) {
   try {
@@ -18,8 +18,10 @@ async function geocodeAddress(address) {
 }
 
 async function getActiveCollection() {
-  const result = await pool.query(`SELECT collection_name FROM active_collection WHERE id=1`);
-  return result.rows[0]?.collection_name || "Default";
+  const row = await prisma.activeCollection.findUnique({
+    where: { id: 1 }
+  });
+  return row?.collectionName || "Default";
 }
 
 function validateEventFields({ title, type, date, address }) {
