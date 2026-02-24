@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  username     String @unique
+  passwordHash String @map("password_hash")
+  role         String
+
+  @@map("users")
+}
+
+model Collection {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  events Event[]
+
+  @@map("collections")
+}
+
+model Event {
+  id           Int      @id @default(autoincrement())
+  title        String
+  type         String?  @db.VarChar(100)
+  date         DateTime @db.Date
+  description  String?
+  address      String?
+  location     Unsupported("geography")
+  position     Int      @default(0)
+  favorite     Boolean  @default(false)
+
+  collectionId Int        @map("collection_id")
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@map("events")
+}
+
+model ActiveCollection {
+  id             Int    @id @default(autoincrement())
+  collectionName String @unique @map("collection_name")
+
+  @@map("active_collection")
+}
+

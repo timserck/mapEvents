@@ -20,6 +20,7 @@ services:
     container_name: events_backend
     restart: always
     environment:
+      DATABASE_URL: postgres://postgres:mysecretpassword@db:5432/eventsdb
       DB_USER: postgres
       DB_PASSWORD: mysecretpassword
       DB_HOST: db

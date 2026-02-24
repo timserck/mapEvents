@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
+const prisma = require("../prismaClient");
 const { authMiddleware, adminMiddleware } = require("../middlewares/auth");
 const { 
   getActiveCollection,
@@ -53,7 +54,8 @@ router.get("/", async (req, res, next) => {
   try {
     const collection = req.query.collection || await getActiveCollection();
 
-    const { rows } = await pool.query(`
+    // Use Prisma for main data fetch, raw SQL only where PostGIS is needed
+    const events = await prisma.$queryRaw`
       SELECT
         e.id,
         e.title,
@@ -68,11 +70,11 @@ router.get("/", async (req, res, next) => {
         c.name AS collection
       FROM events e
       JOIN collections c ON e.collection_id = c.id
-      WHERE c.name = $1
+      WHERE c.name = ${collection}
       ORDER BY e.position ASC
-    `, [collection]);
+    `;
 
-    res.json(rows);
+    res.json(events);
   } catch (err) {
     next(err);
   }
@@ -101,55 +103,49 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res, next) => {
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
     if (!position) {
-      const posRes = await pool.query(
-        `SELECT COALESCE(MAX(position),0)+1 AS next
-         FROM events
-         WHERE collection_id = (SELECT id FROM collections WHERE name=$1)`,
-        [collection]
-      );
-      position = posRes.rows[0].next;
+      const maxPos = await prisma.event.aggregate({
+        _max: { position: true },
+        where: {
+          collection: {
+            name: collection
+          }
+        }
+      });
+      position = (maxPos._max.position || 0) + 1;
     }
 
-    const existsRes = await pool.query(`
+    const existsRes = await prisma.$queryRaw`
       SELECT 1
       FROM events
-      WHERE collection_id = (SELECT id FROM collections WHERE name=$1)
+      WHERE collection_id = (SELECT id FROM collections WHERE name=${collection})
         AND ST_DWithin(
           location,
-          ST_SetSRID(ST_MakePoint($2,$3),4326),
+          ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}),4326),
           0
         )
       LIMIT 1
-    `, [collection, longitude, latitude]);
+    `;
 
-    if (existsRes.rowCount > 0) {
+    if (Array.isArray(existsRes) && existsRes.length > 0) {
       return res.status(409).json({ error: "Event already exists at this location" });
     }
 
-    const result = await pool.query(`
+    const inserted = await prisma.$queryRaw`
       INSERT INTO events
         (title,type,date,description,address,location,position,collection_id,favorite)
       VALUES
-        ($1,$2,$3,$4,$5,ST_GeogFromText($6),$7,
-         (SELECT id FROM collections WHERE name=$8),
-         $9)
+        (${title},${type},${date},${description},${address},
+         ST_GeogFromText(${`SRID=4326;POINT(${longitude} ${latitude})`}),
+         ${position},
+         (SELECT id FROM collections WHERE name=${collection}),
+         ${favorite})
       RETURNING
         id,title,type,date,description,address,position,favorite,
         ST_Y(location::geometry) AS latitude,
         ST_X(location::geometry) AS longitude
-    `, [
-      title,
-      type,
-      date,
-      description,
-      address,
-      `SRID=4326;POINT(${longitude} ${latitude})`,
-      position,
-      collection,
-      favorite
-    ]);
+    `;
 
-    res.json({ ...result.rows[0], collection });
+    res.json({ ...inserted[0], collection });
   } catch (err) {
     next(err);
   }
@@ -179,41 +175,30 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
     date = validateEventFields({ title, type, date, address });
     ({ latitude, longitude } = await ensureLatLng({ address, latitude, longitude }));
 
-    const result = await pool.query(`
+    const updated = await prisma.$queryRaw`
       UPDATE events
       SET
-        title=$1,
-        type=$2,
-        date=$3,
-        description=$4,
-        address=$5,
-        location=ST_GeogFromText($6),
-        collection_id=(SELECT id FROM collections WHERE name=$7),
-        position=$8,
-        favorite=COALESCE($9,favorite)
-      WHERE id=$10
+        title=${title},
+        type=${type},
+        date=${date},
+        description=${description},
+        address=${address},
+        location=ST_GeogFromText(${`SRID=4326;POINT(${longitude} ${latitude})`}),
+        collection_id=(SELECT id FROM collections WHERE name=${collection}),
+        position=${position},
+        favorite=COALESCE(${favorite},favorite)
+      WHERE id=${id}
       RETURNING
         id,title,type,date,description,address,position,favorite,
         ST_Y(location::geometry) AS latitude,
         ST_X(location::geometry) AS longitude
-    `, [
-      title,
-      type,
-      date,
-      description,
-      address,
-      `SRID=4326;POINT(${longitude} ${latitude})`,
-      collection,
-      position,
-      favorite,
-      id
-    ]);
+    `;
 
-    if (!result.rows.length) {
+    if (!Array.isArray(updated) || !updated.length) {
       return res.status(404).json({ error: "Event not found" });
     }
 
-    res.json({ ...result.rows[0], collection });
+    res.json({ ...updated[0], collection });
   } catch (err) {
     next(err);
   }
@@ -224,7 +209,9 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
 ========================================================= */
 router.delete("/:id", authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
-    await pool.query("DELETE FROM events WHERE id=$1", [req.params.id]);
+    await prisma.event.delete({
+      where: { id: Number(req.params.id) }
+    });
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -249,28 +236,21 @@ router.post("/bulk", authMiddleware, adminMiddleware, async (req, res, next) => 
       const date = validateEventFields(ev);
       const { latitude, longitude } = await ensureLatLng(ev);
 
-      const result = await pool.query(`
+      const rows = await prisma.$queryRaw`
         INSERT INTO events
           (title,type,date,description,address,location,collection_id,favorite)
         VALUES
-          ($1,$2,$3,$4,$5,ST_GeogFromText($6),
-           (SELECT id FROM collections WHERE name=$7),
+          (${ev.title},${ev.type},${date},${ev.description},${ev.address},
+           ST_GeogFromText(${`SRID=4326;POINT(${longitude} ${latitude})`}),
+           (SELECT id FROM collections WHERE name=${collectionName}),
            FALSE)
         RETURNING
           id,title,type,date,description,address,position,favorite,
           ST_Y(location::geometry) AS latitude,
           ST_X(location::geometry) AS longitude
-      `, [
-        ev.title,
-        ev.type,
-        date,
-        ev.description,
-        ev.address,
-        `SRID=4326;POINT(${longitude} ${latitude})`,
-        collectionName
-      ]);
+      `;
 
-      inserted.push({ ...result.rows[0], collection: collectionName });
+      inserted.push({ ...rows[0], collection: collectionName });
     }
 
     res.json(inserted);
@@ -289,14 +269,17 @@ router.patch("/reorder", authMiddleware, adminMiddleware, async (req, res, next)
   }
 
   try {
-    await pool.query("BEGIN");
+    await prisma.$executeRawUnsafe("BEGIN");
     for (let i = 0; i < orderedIds.length; i++) {
-      await pool.query("UPDATE events SET position=$1 WHERE id=$2", [i + 1, orderedIds[i]]);
+      await prisma.event.update({
+        where: { id: Number(orderedIds[i]) },
+        data: { position: i + 1 }
+      });
     }
-    await pool.query("COMMIT");
+    await prisma.$executeRawUnsafe("COMMIT");
     res.json({ success: true });
   } catch (err) {
-    await pool.query("ROLLBACK");
+    await prisma.$executeRawUnsafe("ROLLBACK");
     next(err);
   }
 });
@@ -309,15 +292,15 @@ router.get("/route", async (req, res, next) => {
     const collection = req.query.collection || await getActiveCollection();
     const mode = req.query.mode || "driving";
 
-    const { rows } = await pool.query(`
+    const rows = await prisma.$queryRaw`
       SELECT
         ST_Y(location::geometry) AS latitude,
         ST_X(location::geometry) AS longitude
       FROM events
-      WHERE collection_id = (SELECT id FROM collections WHERE name=$1)
-        AND favorite = true      -- ✅ filtre les favoris uniquement
+      WHERE collection_id = (SELECT id FROM collections WHERE name=${collection})
+        AND favorite = true
       ORDER BY position ASC
-    `, [collection]);
+    `;
 
     if (rows.length < 2) {
       return res.status(400).json({ error: "At least 2 points required" });
@@ -349,18 +332,18 @@ router.patch("/:id/favorite", authMiddleware, adminMiddleware, async (req, res, 
   try {
     const { id } = req.params;
 
-    const result = await pool.query(`
+    const rows = await prisma.$queryRaw`
       UPDATE events
       SET favorite = NOT favorite
-      WHERE id=$1
+      WHERE id=${id}
       RETURNING id,favorite
-    `, [id]);
+    `;
 
-    if (!result.rows.length) {
+    if (!Array.isArray(rows) || !rows.length) {
       return res.status(404).json({ error: "Event not found" });
     }
 
-    res.json(result.rows[0]);
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }
