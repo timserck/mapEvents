@@ -1,19 +1,30 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 
+interface MultiSelectDropdownProps {
+  options: string[];
+  selected: string[];
+  setSelected: (values: string[]) => void;
+  label?: string;
+}
+
 export default function MultiSelectDropdown({
   options,
   selected,
   setSelected,
   label = "Options",
-}) {
+}: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const buttonRef = useRef(null);
-  const dropdownRef = useRef(null); // NEW
-  const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const [dropdownCoords, setDropdownCoords] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
 
-  const toggleOption = (option) => {
+  const toggleOption = (option: string) => {
     if (option === "all") {
       setSelected(["all"]);
     } else {
@@ -24,25 +35,25 @@ export default function MultiSelectDropdown({
     }
   };
 
-  const isChecked = (option) => selected.includes(option);
+  const isChecked = (option: string) => selected.includes(option);
 
   const filteredOptions = options.filter((opt) =>
     opt.toLowerCase().includes(search.toLowerCase())
   );
 
-  const displayText =
-    selected.includes("all")
-      ? `${label}: Tous`
-      : `${label}: ${selected.length} sélectionné${selected.length > 1 ? "s" : ""}`;
+  const displayText = selected.includes("all")
+    ? `${label}: Tous`
+    : `${label}: ${selected.length} sélectionné${
+        selected.length > 1 ? "s" : ""
+      }`;
 
-  // Close dropdown when clicking outside BOTH button and dropdown
   useEffect(() => {
-    const handleClickOutside = (e) => {
+    const handleClickOutside = (e: MouseEvent) => {
       if (
         buttonRef.current &&
-        !buttonRef.current.contains(e.target) &&
+        !buttonRef.current.contains(e.target as Node) &&
         dropdownRef.current &&
-        !dropdownRef.current.contains(e.target)
+        !dropdownRef.current.contains(e.target as Node)
       ) {
         setIsOpen(false);
         setSearch("");
@@ -52,7 +63,6 @@ export default function MultiSelectDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Position the dropdown
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
@@ -74,24 +84,32 @@ export default function MultiSelectDropdown({
       >
         <span>{displayText}</span>
         <svg
-          className={`w-4 h-4 ml-2 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`w-4 h-4 ml-2 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
       {isOpen &&
         createPortal(
           <div
-            ref={dropdownRef} // NEW
+            ref={dropdownRef}
             className="absolute z-[4000] bg-white border rounded shadow-lg max-h-60 overflow-auto w-full"
             style={{
               top: dropdownCoords.top,
               left: dropdownCoords.left,
-              width: window.innerWidth < 640 ? "90%" : dropdownCoords.width,
+              width:
+                window.innerWidth < 640 ? "90%" : `${dropdownCoords.width}px`,
               maxWidth: window.innerWidth < 640 ? "90%" : "auto",
             }}
           >
@@ -122,3 +140,4 @@ export default function MultiSelectDropdown({
     </div>
   );
 }
+

@@ -2,7 +2,19 @@ import { useEffect } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 
-export default function RouteToggleButton({ toggleRoute, showRoute, routeMode, setRouteMode }) {
+interface RouteToggleButtonProps {
+  toggleRoute: () => void;
+  showRoute: boolean;
+  routeMode: string;
+  setRouteMode: (mode: string) => void;
+}
+
+export default function RouteToggleButton({
+  toggleRoute,
+  showRoute,
+  routeMode,
+  setRouteMode,
+}: RouteToggleButtonProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -16,10 +28,12 @@ export default function RouteToggleButton({ toggleRoute, showRoute, routeMode, s
     container.style.gap = "4px";
 
     const btn = L.DomUtil.create("button", "", container);
-    btn.innerHTML = showRoute ? "❌ Cacher Itinéraire favoris" : "🗺️ Afficher Itinéraire favoris";
+    btn.innerHTML = showRoute
+      ? "❌ Cacher Itinéraire favoris"
+      : "🗺️ Afficher Itinéraire favoris";
     btn.style.cursor = "pointer";
 
-    const select = L.DomUtil.create("select", "", container);
+    const select = L.DomUtil.create("select", "", container) as HTMLSelectElement;
     select.innerHTML = `
       <option value="foot">🚶 Marche</option>
       <option value="driving">🚗 Voiture</option>
@@ -29,18 +43,20 @@ export default function RouteToggleButton({ toggleRoute, showRoute, routeMode, s
     L.DomEvent.disableClickPropagation(container);
 
     btn.onclick = toggleRoute;
-    select.onchange = (e) => setRouteMode(e.target.value);
+    select.onchange = (e: any) =>
+      setRouteMode((e.target as HTMLSelectElement).value);
 
     const Control = L.Control.extend({
-      options: { position: "topright" },
-      onAdd: () => container
+      options: { position: "topright" as L.ControlPosition },
+      onAdd: () => container,
     });
 
     const control = new Control();
     map.addControl(control);
 
     return () => map.removeControl(control);
-  }, [map, showRoute, routeMode]);
+  }, [map, showRoute, routeMode, setRouteMode]);
 
   return null;
 }
+

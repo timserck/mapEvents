@@ -1,6 +1,18 @@
 import React, { useState } from "react";
 
-export default function LazyImage({ src, alt, className, placeholderColor = "#ccc" }) {
+interface LazyImageProps {
+  src: string;
+  alt: string;
+  className?: string;
+  placeholderColor?: string;
+}
+
+export default function LazyImage({
+  src,
+  alt,
+  className,
+  placeholderColor = "#ccc",
+}: LazyImageProps) {
   const [loaded, setLoaded] = useState(false);
 
   return (
@@ -33,3 +45,4 @@ export default function LazyImage({ src, alt, className, placeholderColor = "#cc
     </div>
   );
 }
+

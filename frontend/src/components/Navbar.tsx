@@ -1,30 +1,35 @@
-// components/Navbar.jsx
+// components/Navbar.tsx
 import React, { useState } from "react";
 import { useAuth } from "../AuthContext";
 
-export default function Navbar({ togglePanel }) {
-  const { token, role, login, logout } = useAuth();
+interface NavbarProps {
+  togglePanel: () => void;
+}
+
+export default function Navbar({ togglePanel }: NavbarProps) {
+  const { token, role, login, logout } = useAuth() as any;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Call the login function from AuthContext
       await login(username, password);
       setUsername("");
       setPassword("");
       setError("");
-    } catch (err) {
-      setError(err.message); // display backend error
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
   return (
     <nav className="bg-gray-800 text-white relative z-[3000] flex items-center justify-between px-4 md:px-6 py-3 shadow-md gap-2">
-      <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">Map of events</div>
+      <div className="text-xl font-bold mr-2 md:mr-4 truncate max-w-[50%] md:max-w-[40%] min-w-0">
+        Map of events
+      </div>
 
       {/* Desktop/Tablet controls */}
       <div className="hidden md:flex items-center gap-2 md:gap-3 flex-nowrap min-w-0 flex-1 justify-end">
@@ -66,11 +71,15 @@ export default function Navbar({ togglePanel }) {
             >
               Se connecter
             </button>
-            {error && <span className="text-red-500 hidden md:inline">{error}</span>}
+            {error && (
+              <span className="text-red-500 hidden md:inline">{error}</span>
+            )}
           </form>
         ) : (
           <div className="flex items-center gap-2 md:gap-3 flex-nowrap min-w-0">
-            <span className="truncate max-w-[120px] md:max-w-none">Rôle : {role}</span>
+            <span className="truncate max-w-[120px] md:max-w-none">
+              Rôle : {role}
+            </span>
             <button
               onClick={logout}
               className="bg-red-500 px-2 md:px-3 py-2 rounded hover:bg-red-600 transition"
@@ -95,7 +104,12 @@ export default function Navbar({ togglePanel }) {
           stroke="currentColor"
           className="w-6 h-6"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            d="M4 6h16M4 12h16M4 18h16"
+          />
         </svg>
       </button>
 
@@ -105,7 +119,10 @@ export default function Navbar({ togglePanel }) {
           <div className="px-4 py-3 flex flex-col gap-3">
             {token && role === "admin" && (
               <button
-                onClick={() => { setIsMenuOpen(false); togglePanel(); }}
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  togglePanel();
+                }}
                 className="bg-blue-500 px-3 py-2 rounded hover:bg-blue-600 transition text-left"
               >
                 Panel Admin
@@ -142,7 +159,10 @@ export default function Navbar({ togglePanel }) {
               <div className="flex items-center justify-between">
                 <span>Rôle : {role}</span>
                 <button
-                  onClick={() => { setIsMenuOpen(false); logout(); }}
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    logout();
+                  }}
                   className="bg-red-500 px-3 py-2 rounded hover:bg-red-600 transition"
                 >
                   Déconnexion
@@ -155,3 +175,4 @@ export default function Navbar({ togglePanel }) {
     </nav>
   );
 }
+

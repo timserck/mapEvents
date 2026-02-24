@@ -2,11 +2,21 @@ import React, { useState } from "react";
 import { apiFetch } from "../apiFetch";
 import { useAuth } from "../AuthContext";
 
+interface GptEventGeneratorProps {
+  activeCollection: string;
+  setBulkJson: (json: string) => void;
+  setMessage: (msg: string) => void;
+}
 
-export default function GptEventGenerator({ activeCollection, setBulkJson, setMessage }) {
+export default function GptEventGenerator({
+  activeCollection,
+  setBulkJson,
+  setMessage,
+}: GptEventGeneratorProps) {
   const [gptPrompt, setGptPrompt] = useState("");
   const [loadingGPT, setLoadingGPT] = useState(false);
-  const { logout } = useAuth();
+  const { logout } = useAuth() as any;
+
   const generateFromGPT = async () => {
     if (!gptPrompt) {
       setMessage("⚠️ Veuillez saisir une description.");
@@ -21,10 +31,14 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
     setMessage("");
 
     try {
-      const res = await apiFetch("/events/gpt-events", {
-        method: "POST",
-        body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection }, logout),
-      });
+      const res = await apiFetch(
+        "/events/gpt-events",
+        {
+          method: "POST",
+          body: JSON.stringify({ prompt: gptPrompt, collection: activeCollection }),
+        },
+        logout
+      );
 
       if (!res?.ok) {
         const errData = await res?.json();
@@ -36,8 +50,7 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
 
       const data = await res.json();
 
-      // Ensure it's valid JSON
-      let parsed;
+      let parsed: any;
       try {
         parsed = typeof data === "string" ? JSON.parse(data) : data;
       } catch (err) {
@@ -70,10 +83,13 @@ export default function GptEventGenerator({ activeCollection, setBulkJson, setMe
         type="button"
         onClick={generateFromGPT}
         disabled={loadingGPT}
-        className={`px-3 py-2 rounded text-white ${loadingGPT ? "bg-gray-400" : "bg-purple-600 hover:bg-purple-700"}`}
+        className={`px-3 py-2 rounded text-white ${
+          loadingGPT ? "bg-gray-400" : "bg-purple-600 hover:bg-purple-700"
+        }`}
       >
         {loadingGPT ? "⏳..." : "✨ GPT"}
       </button>
     </div>
   );
 }
+

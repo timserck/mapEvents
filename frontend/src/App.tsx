@@ -5,15 +5,6 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import MapPage from "./pages/MapPage";
 import Navbar from "./components/Navbar";
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <MainApp />
-      <ToastContainer position="top-right" autoClose={3000} />
-    </AuthProvider>
-  );
-}
-
 function MainApp() {
   const { token, role, logout } = useAuth();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -23,9 +14,7 @@ function MainApp() {
 
   return (
     <div className="flex flex-col min-h-screen-mobile">
-      {/* Navbar handles the toggle */}
       <Navbar togglePanel={togglePanel} />
-      {/* MapPage receives only role, token, and panel state */}
       <MapPage
         logout={logout}
         role={role}
@@ -36,3 +25,13 @@ function MainApp() {
     </div>
   );
 }
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <MainApp />
+      <ToastContainer position="top-right" autoClose={3000} />
+    </AuthProvider>
+  );
+}
+

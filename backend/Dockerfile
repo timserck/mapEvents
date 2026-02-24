@@ -12,9 +12,11 @@ COPY package*.json ./
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 build-essential g++ make \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install --omit=dev --no-audit --no-fund
+  && npm install --no-audit --no-fund
 
 COPY . .
 
+RUN npm run build
+
 EXPOSE 4000
-CMD ["node", "server.js"]
+CMD ["node", "dist/server.js"]
