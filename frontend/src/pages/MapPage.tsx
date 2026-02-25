@@ -427,8 +427,8 @@ export default function MapPage({
         >
           <MapCenterUpdater center={center} />
           <TileLayer
-            attribution="&copy; OpenStreetMap"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            {...({ attribution: "&copy; OpenStreetMap" } as any)}
           />
           <GeolocateButton
             setUserPosition={setUserPosition}
