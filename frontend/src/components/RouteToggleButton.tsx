@@ -54,7 +54,9 @@ export default function RouteToggleButton({
     const control = new Control();
     map.addControl(control);
 
-    return () => map.removeControl(control);
+    return () => {
+      map.removeControl(control);
+    };
   }, [map, showRoute, routeMode, setRouteMode]);
 
   return null;
