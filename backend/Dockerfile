@@ -3,7 +3,7 @@ FROM --platform=linux/amd64 node:20-bookworm
 WORKDIR /app
 
 # 1️⃣ Copier uniquement les manifests (cache Docker)
-COPY package.json package-lock.json ./
+COPY package.json ./
 
 # 2️⃣ Config npm + cache BuildKit (IMPORTANT)
 RUN npm config set fetch-retries 5 \
