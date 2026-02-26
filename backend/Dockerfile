@@ -1,22 +1,20 @@
-FROM node:20-bookworm
-
-# Reduce memory pressure during npm install on low-RAM devices
-ENV npm_config_jobs=1 \
-    npm_config_loglevel=warn \
-    npm_config_progress=false
+FROM node:20-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-# Install build deps for native modules like bcrypt on ARM
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 build-essential g++ make \
-  && rm -rf /var/lib/apt/lists/* \
-  && npm install --no-audit --no-fund
+RUN npm install
 
+# 👇 COPY PRISMA SCHEMA BEFORE GENERATE
+COPY prisma ./prisma
+
+# 👇 THIS IS THE IMPORTANT LINE
+RUN npx prisma generate
+
+# Copy rest of the source
 COPY . .
 
 RUN npm run build
 
 EXPOSE 4000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/index.js"]
