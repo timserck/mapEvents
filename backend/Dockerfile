@@ -1,19 +1,14 @@
-FROM node:20-alpine
+FROM node:20-bookworm
 
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
 
-# 👇 COPY PRISMA SCHEMA BEFORE GENERATE
 COPY prisma ./prisma
-
-# 👇 THIS IS THE IMPORTANT LINE
 RUN npx prisma generate
 
-# Copy rest of the source
 COPY . .
-
 RUN npm run build
 
 EXPOSE 4000
