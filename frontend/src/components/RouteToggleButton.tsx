@@ -2,11 +2,13 @@ import { useEffect } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
 
+type RouteMode = "foot" | "driving";
+
 interface RouteToggleButtonProps {
   toggleRoute: () => void;
   showRoute: boolean;
-  routeMode: string;
-  setRouteMode: (mode: string) => void;
+  routeMode: RouteMode;
+  setRouteMode: (mode: RouteMode) => void;
 }
 
 export default function RouteToggleButton({
