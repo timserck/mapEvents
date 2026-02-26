@@ -46,7 +46,9 @@ export default function RouteToggleButton({
 
     btn.onclick = toggleRoute;
     select.onchange = (e: any) =>
-      setRouteMode((e.target as HTMLSelectElement).value);
+      setRouteMode(
+        (e.target as HTMLSelectElement).value as RouteMode
+      );
 
     const Control = L.Control.extend({
       options: { position: "topright" as L.ControlPosition },
