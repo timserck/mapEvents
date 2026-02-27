@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y \
 # Dépendances (cache Docker efficace)
 COPY package.json package-lock.json ./
 
-RUN npm ci --no-progress --no-audit --no-fund
+RUN npm ci \
+  --no-progress \
+  --no-audit \
+  --no-fund \
+  --fetch-retries=10 \
+  --fetch-retry-mintimeout=20000 \
+  --fetch-retry-maxtimeout=120000
 
 # Prisma
 COPY prisma ./prisma
