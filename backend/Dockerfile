@@ -17,6 +17,7 @@ COPY package.json package-lock.json ./
 
 RUN npm ci --no-progress
 
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 COPY prisma ./prisma
 RUN npx prisma generate
 
