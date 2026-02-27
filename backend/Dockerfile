@@ -2,7 +2,7 @@ FROM --platform=linux/amd64 node:20-bookworm
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json ./
 
 # Config npm SANS ipv6
 RUN npm config set fetch-retries 5 \
