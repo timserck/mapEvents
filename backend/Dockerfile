@@ -2,17 +2,20 @@ FROM --platform=linux/amd64 node:20-bookworm
 
 WORKDIR /app
 
-# 1️⃣ Copier manifests (package.json + package-lock.json)
+# Toolchain pour deps natives
+RUN apt-get update && apt-get install -y \
+  python3 \
+  make \
+  g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 
-# 2️⃣ Install propre et déterministe
 RUN npm ci --no-progress --no-audit --no-fund
 
-# 3️⃣ Prisma
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# 4️⃣ Code
 COPY . .
 RUN npm run build
 
