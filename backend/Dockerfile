@@ -2,29 +2,24 @@ FROM --platform=linux/amd64 node:20-bookworm
 
 WORKDIR /app
 
-# Toolchain requise pour les deps natives (node-pre-gyp, bcrypt, etc.)
 RUN apt-get update && apt-get install -y \
   python3 \
   make \
   g++ \
   && rm -rf /var/lib/apt/lists/*
 
-# Dépendances (cache Docker efficace)
+# Registry miroir (clé du succès)
+RUN npm config set registry https://registry.npmmirror.com \
+ && npm config set fund false \
+ && npm config set audit false
+
 COPY package.json package-lock.json ./
 
-RUN npm ci \
-  --no-progress \
-  --no-audit \
-  --no-fund \
-  --fetch-retries=10 \
-  --fetch-retry-mintimeout=20000 \
-  --fetch-retry-maxtimeout=120000
+RUN npm ci --no-progress
 
-# Prisma
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Code
 COPY . .
 RUN npm run build
 
