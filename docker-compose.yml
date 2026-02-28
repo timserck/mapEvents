@@ -16,7 +16,9 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      network: host
     container_name: events_backend
     restart: always
     environment:
