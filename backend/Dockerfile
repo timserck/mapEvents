@@ -2,21 +2,19 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
-# 1️⃣ Dépendances
 COPY package*.json ./
 RUN npm install --no-audit --no-fund
 
-# 2️⃣ Prisma schema en premier (important pour cache + generate)
-COPY prisma ./prisma
-
-# 3️⃣ Génération Prisma DANS Docker (linux-arm)
-ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
-RUN npx prisma generate
-
-# 4️⃣ Code source
 COPY . .
 
-# 5️⃣ Build TypeScript
+# Forcer Prisma à générer le client pour l’arch du conteneur
+ENV PRISMA_CLI_QUERY_ENGINE_TYPE=binary
+ENV PRISMA_ENGINES_DIR=/app/prisma-engines
+ENV PRISMA_QUERY_ENGINE_BINARY=/app/prisma-engines/query-engine
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+
+RUN npx prisma generate --binary-targets native
+
 RUN npm run build
 
 EXPOSE 4000
