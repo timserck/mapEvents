@@ -10,6 +10,7 @@ RUN npm install --no-audit --no-fund
 COPY prisma ./prisma
 
 # 3️⃣ Génération Prisma DANS Docker (linux-arm)
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 RUN npx prisma generate
 
 # 4️⃣ Code source
