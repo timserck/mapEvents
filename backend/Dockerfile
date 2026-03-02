@@ -21,7 +21,7 @@ ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-COPY backend/prisma ./prisma
+COPY prisma ./prisma
 RUN npx prisma generate --schema=./prisma/schema.prisma
 
 COPY . .
