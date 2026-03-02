@@ -2,24 +2,12 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-  python3 \
-  make \
-  g++ \
-  && rm -rf /var/lib/apt/lists/*
-
-RUN npm config set registry https://registry.npmmirror.com \
- && npm config set fund false \
- && npm config set audit false
-
-COPY package.json package-lock.json ./
-RUN npm ci --no-progress
+COPY package*.json ./
+RUN npm install --no-audit --no-fund
 
 COPY . .
 
 RUN npm run build
 
 EXPOSE 4000
-
-# ⚠️ PAS de prisma generate ici
 CMD ["node", "dist/index.js"]
