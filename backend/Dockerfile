@@ -2,13 +2,19 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
+# Prisma schema must exist
+COPY prisma ./prisma/
+
 COPY package*.json ./
+
+# Install deps WITHOUT Prisma running
 RUN npm install --no-audit --no-fund
 
+# Copy rest of the code
 COPY . .
 
-# Skip prisma generate in Docker, we already generated it on host
-# RUN npx prisma generate
+# Generate Prisma INSIDE Docker (Linux)
+RUN npx prisma generate
 
 RUN npm run build
 
