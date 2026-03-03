@@ -1,21 +1,19 @@
-FROM node:20-bookworm
+# Force x86_64 image
+FROM --platform=linux/amd64 node:20-bookworm
 
 WORKDIR /app
 
-# Prisma schema must exist
+# Copy only what is needed for install
+COPY package*.json ./
 COPY prisma ./prisma/
 
-COPY package*.json ./
-
-# Install deps WITHOUT Prisma running
+# Install deps (prisma generate will work here)
 RUN npm install --no-audit --no-fund
 
-# Copy rest of the code
+# Copy source AFTER install
 COPY . .
 
-# Generate Prisma INSIDE Docker (Linux)
-RUN npx prisma generate
-
+# Build TS
 RUN npm run build
 
 EXPOSE 4000
