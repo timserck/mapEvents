@@ -1,4 +1,3 @@
-# Force x86_64 image
 FROM --platform=linux/amd64 node:20-bookworm
 
 WORKDIR /app
@@ -7,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install deps (prisma generate will work here)
+# Install deps (prisma generate runs here via postinstall)
 RUN npm install --no-audit --no-fund
 
 # Copy source AFTER install
